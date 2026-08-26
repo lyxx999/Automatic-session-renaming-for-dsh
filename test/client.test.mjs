@@ -78,11 +78,11 @@ const requireStub = (name) => {
 }
 
 // ── 执行真实 bundle ────────────────────────────────────────────────
-await import('@hytime/dsh-session-autotitle/client')
+await import('@lyxx/dsh-session-autotitle/client')
 
 test('bundle 经 __ModuleLoader__ 注册一次，id 正确', () => {
   assert.equal(loadCalls.length, 1)
-  assert.equal(loadCalls[0].id, '@hytime/dsh-session-autotitle')
+  assert.equal(loadCalls[0].id, '@lyxx/dsh-session-autotitle')
   assert.equal(typeof loadCalls[0].factory, 'function')
 })
 

@@ -1,4 +1,4 @@
-# @hytime/dsh-session-autotitle：会话自动命名（持久化组合条目）。
+# @lyxx/dsh-session-autotitle：会话自动命名（持久化组合条目）。
 #
 # 组合补丁语义：`name` 是期望守卫而非覆盖（不符即跳过），行 name 不可换；
 # 因此采用「禁用基线行 + 插入新行」：
@@ -15,7 +15,7 @@
   disabled: true
 - insert:
     - id: session-title-autotitle
-      name: '@hytime/dsh-session-autotitle/title'
+      name: '@lyxx/dsh-session-autotitle/title'
       config:
         targetWords: 8
         targetCjkCharacters: 26
@@ -23,4 +23,4 @@
         maxOutputTokens: 256
         timeoutMs: 60000
     - id: session-autotitle
-      name: '@hytime/dsh-session-autotitle'
+      name: '@lyxx/dsh-session-autotitle'

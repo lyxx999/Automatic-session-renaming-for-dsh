@@ -1,5 +1,5 @@
 /**
- * @hytime/dsh-session-autotitle/title — 全消息会话标题提供方。
+ * @lyxx/dsh-session-autotitle/title — 全消息会话标题提供方。
  *
  * 原位替换基线 first-prompt provider（同一 service 插槽）：
  * - 输入 = 会话中全部用户消息（source.kind === 'user'，与基线一致），
@@ -15,7 +15,7 @@ import { BlockAssembler, createUserMessage, deepFreeze } from '@deepseek-ai/dsh-
 import { MAX_TIMER_DELAY_MS, deadline } from '@deepseek-ai/dsh-timeout'
 import { SessionTitleProviderId, normalizeSessionTitle } from '@deepseek-ai/dsh-session-title'
 
-export const name = '@hytime/dsh-session-autotitle/title'
+export const name = '@lyxx/dsh-session-autotitle/title'
 export const inject = ['sessionTitle', 'llm']
 
 const TIMEOUT_CODE = 'SESSION_AUTOTITLE_TIMEOUT'

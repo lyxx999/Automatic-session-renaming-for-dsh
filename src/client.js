@@ -14,7 +14,7 @@
  * （手写、内联样式、零构建，与 @hytime/dsh-thinking-effort 同格式）。
  */
 window.__ModuleLoader__.load({
-  id: '@hytime/dsh-session-autotitle',
+  id: '@lyxx/dsh-session-autotitle',
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;

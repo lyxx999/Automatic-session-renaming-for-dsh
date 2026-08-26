@@ -1,4 +1,4 @@
-# @hytime/dsh-session-autotitle
+# @lyxx/dsh-session-autotitle
 
 DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
@@ -95,11 +95,11 @@ node "$dsh\profiles\session-autotitle\scripts\repatch-sidebar.mjs"
 ## 安装（已在本机 desktop profile 完成）
 
 1. `profiles/desktop/package.json`：
-   `dependencies` 加 `"@hytime/dsh-session-autotitle": "file:../session-autotitle"`，
+   `dependencies` 加 `"@lyxx/dsh-session-autotitle": "file:../session-autotitle"`，
    `dsh.profile.bundles` 追加包名（在 dsh-web-app 之后）。
 2. `pnpm install --dir profiles/desktop`。
    注意：pnpm 对 file: 依赖不感知新目录（如 test/），需手动同步到
-   `profiles/desktop/node_modules/@hytime/dsh-session-autotitle/`
+   `profiles/desktop/node_modules/@lyxx/dsh-session-autotitle/`
    （复制即可；源码目录为唯一真相源）。
 3. 重启 DSH Desktop（bundle 集变化需要重启）。
 
@@ -127,8 +127,8 @@ node '<安装根>\node_modules\@deepseek-ai\dsh\lib\bin.js' --profile desktop --
    npm publish          # publishConfig.access=public 已声明
    ```
 3. **他人安装**：DSH Desktop 的市场（dshmarket）装的就是 npm 包——
-   市场搜 `@hytime/dsh-session-autotitle` 安装即可；或手动：
-   `pnpm add @hytime/dsh-session-autotitle`（profile 目录）+
+   市场搜 `@lyxx/dsh-session-autotitle` 安装即可；或手动：
+   `pnpm add @lyxx/dsh-session-autotitle`（profile 目录）+
    `dsh.profile.bundles` 追加包名 + 重启。
 4. **侧边栏菜单条目**不在 npm 包的能力范围内（要写安装目录，需本机 UAC）；
    市场安装的用户可用会话头按钮 / `/autotitle` / 两个自动触发，

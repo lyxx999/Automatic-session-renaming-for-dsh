@@ -1,5 +1,5 @@
 /**
- * @hytime/dsh-session-autotitle — 宿主半区（行 `session-autotitle`）：
+ * @lyxx/dsh-session-autotitle — 宿主半区（行 `session-autotitle`）：
  *
  * 1) /autotitle 命令：手动总结重命名。走 sessionTitle.refresh —— 有意
  *    覆盖用户钉住的标题（refresh 的 unpin 语义，与手动重命名同级）。
@@ -15,7 +15,7 @@
  *       主对话（有档位）→ true，标题调用（off）→ false。
  *    与 @hytime/dsh-thinking-effort 的档位补齐互不冲突（各管各的键）。
  */
-export const name = '@hytime/dsh-session-autotitle'
+export const name = '@lyxx/dsh-session-autotitle'
 export const inject = ['sessions', 'sessionTitle', 'commands', 'settings', 'timer']
 
 const NS = 'llm-pi-ai'
@@ -31,8 +31,8 @@ function describe(error) {
 }
 
 export function apply(ctx) {
-  const log = (...args) => console.log('[@hytime/dsh-session-autotitle]', ...args)
-  const warn = (...args) => console.warn('[@hytime/dsh-session-autotitle]', ...args)
+  const log = (...args) => console.log('[@lyxx/dsh-session-autotitle]', ...args)
+  const warn = (...args) => console.warn('[@lyxx/dsh-session-autotitle]', ...args)
 
   // ── 1) /autotitle：手动总结重命名 ────────────────────────────────
   ctx.effect(

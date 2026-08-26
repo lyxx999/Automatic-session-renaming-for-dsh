@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-const mod = await import('@hytime/dsh-session-autotitle')
+const mod = await import('@lyxx/dsh-session-autotitle')
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 
