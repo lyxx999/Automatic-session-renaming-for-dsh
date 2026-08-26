@@ -4,8 +4,8 @@ DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
 ## 功能
 
-1. **菜单/会话头手动触发**：侧边栏会话 `…` 菜单与会话头操作行都有"自动重命名"
-   入口（`/autotitle` 命令）。点击后 LLM 总结整个会话的用户消息并重新命名；
+1. **手动触发**：会话头操作行的"自动重命名"按钮，或会话内输入 `/autotitle`
+   命令。点击/发送后 LLM 总结整个会话的用户消息并重新命名；
    有意覆盖用户手动钉住的标题（与手动重命名同级）。
 2. **自动触发**：
    - 用户发送**第一条提示词**后自动总结命名（继承基线时序，但现在用
@@ -47,33 +47,8 @@ src/client.js         浏览器：会话头"自动重命名"按钮
                       （conversation.session.header.actions 插槽）+
                       设置分区"会话自动命名"（settings.section 插槽，
                       标题语言：跟随/中文/English/自定义，zh/en/ja/ko）
-scripts/repatch-sidebar.mjs  侧边栏菜单安装补丁（14 处精确替换，
-                      幂等、自动备份、node --check 自检）
-scripts/repatch-elevated.ps1 提权包装（UAC）
 test/                 单元测试（node --test，32 例：title 13 / host 11 / client 8）
 ```
-
-## 为什么侧边栏补丁要提权
-
-`…` 菜单硬编码在已安装的 `dsh-client-ui-workspace/lib/client.js` 里，
-没有插槽可扩展；组合补丁的 `name` 是期望守卫而非覆盖，行 name 不可换，
-因此只能对安装目录文件打补丁。安装目录（Program Files）需要管理员权限，
-`repatch-sidebar.mjs` 必须提权运行（UAC 弹窗点"是"）：
-
-（以下 `$dsh` 指 `~/.dsh`，即 `$env:DSH_HOME` 或 `%USERPROFILE%\.dsh`。）
-
-```powershell
-# 方式一：直接提权运行
-Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$dsh\profiles\session-autotitle\scripts\repatch-elevated.ps1"
-
-# 方式二：自己开管理员终端（安装目录非常规位置时用 DSH_INSTALL_ROOT 指定）
-node "$dsh\profiles\session-autotitle\scripts\repatch-sidebar.mjs"
-```
-
-- 幂等：打过会直接退出（`id: "autotitle"` 标记）。
-- 备份：`client.js.bak-<hash>` 同目录。
-- **DSH 自动更新（dshmarket 替换 app.asar）会冲掉该补丁**，更新后重跑一次即可。
-- 未打补丁时功能不受影响（会话头按钮 + /autotitle + 两个自动触发都在）。
 
 ## 思考关线的接线原理（本地 qwen 路由）
 
@@ -130,15 +105,11 @@ node '<安装根>\node_modules\@deepseek-ai\dsh\lib\bin.js' --profile desktop --
    市场搜 `@lyxx/dsh-session-autotitle` 安装即可；或手动：
    `pnpm add @lyxx/dsh-session-autotitle`（profile 目录）+
    `dsh.profile.bundles` 追加包名 + 重启。
-4. **侧边栏菜单条目**不在 npm 包的能力范围内（要写安装目录，需本机 UAC）；
-   市场安装的用户可用会话头按钮 / `/autotitle` / 两个自动触发，
-   想要 `…` 菜单条目就跑包内 `scripts/repatch-sidebar.mjs`（提权）。
 
 ## 卸载
 
 1. `profiles/desktop/package.json` 移除依赖与 bundle 条目 → `pnpm install`；
 2. 删除 `profiles/session-autotitle/` 目录；
-3. 侧边栏补丁回滚：把 `client.js.bak-*` 复制回 `client.js`（或从安装备份恢复）；
-4. settings.yaml 中被自动补齐的 `off` 档位/`enable_thinking` 参数可留可删
+3. settings.yaml 中被自动补齐的 `off` 档位/`enable_thinking` 参数可留可删
    （留着的副作用：composer 里该模型多出 Off 档，无害）；
-5. 重启 DSH。
+4. 重启 DSH。

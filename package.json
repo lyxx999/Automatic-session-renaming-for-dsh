@@ -1,9 +1,8 @@
 {
   "name": "@lyxx/dsh-session-autotitle",
-  "version": "0.1.0",
-  "description": "DSH 会话自动命名：全消息 LLM 总结标题（首条提示词/handoff 自动 + 菜单/会话头手动），标题调用强制关思考，标题语言可设置。",
+  "version": "0.1.1",
+  "description": "DSH 会话自动命名：全消息 LLM 总结标题（首条提示词/handoff 自动 + 会话头按钮/命令手动），标题调用强制关思考，标题语言可设置。",
   "scripts": {
-    "repatch": "node scripts/repatch-sidebar.mjs",
     "test": "node --test test/"
   },
   "homepage": "https://github.com/lyxx999/Automatic-session-renaming-for-dsh#readme",
@@ -19,8 +18,6 @@
   },
   "files": [
     "src/",
-    "scripts/repatch-sidebar.mjs",
-    "scripts/repatch-elevated.ps1",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"

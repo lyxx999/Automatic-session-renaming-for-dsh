@@ -1,4 +1,2 @@
 node_modules/
 *.tgz
-repatch.done.json
-repatch.log
