@@ -1,0 +1,144 @@
+# @hytime/dsh-session-autotitle
+
+DSH 会话自动命名（profile 本地 bundle，更新免疫）。
+
+## 功能
+
+1. **菜单/会话头手动触发**：侧边栏会话 `…` 菜单与会话头操作行都有"自动重命名"
+   入口（`/autotitle` 命令）。点击后 LLM 总结整个会话的用户消息并重新命名；
+   有意覆盖用户手动钉住的标题（与手动重命名同级）。
+2. **自动触发**：
+   - 用户发送**第一条提示词**后自动总结命名（继承基线时序，但现在用
+     全消息 provider，且标题调用关思考——修复了之前思考吞掉 64 token
+     导致永远只剩回退标题的问题）；
+   - 用户在顶层会话调用 **`/handoff`**（handoff 技能）时自动重命名；
+     用户手动钉住的标题（`source.kind === 'user'`）跳过。
+
+3. **标题语言设置**：设置页新增"会话自动命名"分区（在"模型能力与档位"
+   下方），标题语言 = 跟随消息语言（默认）/ 中文 / English / 自定义
+   （任意语言名，如"日本語"）。生成时所选语言写入系统指令。
+
+标题约定：≤ 80 UTF-8 字节（约 26 个汉字），纯文本无引号。
+
+### 标题语言的存储
+
+插件无法注册新设置命名空间（api-proxy 的 exposedNamespaces 白名单门控），
+故沿用 @hytime/dsh-thinking-effort 的 subagentEffort 惯例：存
+`llm-pi-ai` 命名空间**用户层**顶层键 `titleLanguage`（pi-ai schema 忽略
+该键但原样持久化）。宿主经 `settings.describe()` 的 user 层读取，
+客户端经 `connection.api.settings.describe/mutate` 读写（revision 乐观并发）。
+思考接线自补齐只写 `providers` 字段，不会冲掉该键。
+
+失败策略：手动触发 → 会话内一行错误 + 宿主日志；自动触发 → 仅宿主日志。
+
+## 组成
+
+```
+package.json          包清单（dsh.bundle.patch + dsh.client 声明）
+cordis.patch.yml      组合补丁：禁用基线 session-title-llm 行；
+                      插入 session-title-autotitle（title 提供方）与
+                      session-autotitle（命令/钩子/自补齐）两行
+src/title.mjs         宿主：全消息标题提供方（首条锚点+最近窗口，
+                      16KB 预算；reasoningEffort 'off' + 不支持时回退）
+src/host.mjs          宿主：/autotitle 命令、/handoff 手势钩子、
+                      llm-pi-ai 路由思考接线自补齐（off 档位 +
+                      chat_template_kwargs.enable_thinking）
+src/client.js         浏览器：会话头"自动重命名"按钮
+                      （conversation.session.header.actions 插槽）+
+                      设置分区"会话自动命名"（settings.section 插槽，
+                      标题语言：跟随/中文/English/自定义，zh/en/ja/ko）
+scripts/repatch-sidebar.mjs  侧边栏菜单安装补丁（14 处精确替换，
+                      幂等、自动备份、node --check 自检）
+scripts/repatch-elevated.ps1 提权包装（UAC）
+test/                 单元测试（node --test，32 例：title 13 / host 11 / client 8）
+```
+
+## 为什么侧边栏补丁要提权
+
+`…` 菜单硬编码在已安装的 `dsh-client-ui-workspace/lib/client.js` 里，
+没有插槽可扩展；组合补丁的 `name` 是期望守卫而非覆盖，行 name 不可换，
+因此只能对安装目录文件打补丁。安装目录（Program Files）需要管理员权限，
+`repatch-sidebar.mjs` 必须提权运行（UAC 弹窗点"是"）：
+
+（以下 `$dsh` 指 `~/.dsh`，即 `$env:DSH_HOME` 或 `%USERPROFILE%\.dsh`。）
+
+```powershell
+# 方式一：直接提权运行
+Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$dsh\profiles\session-autotitle\scripts\repatch-elevated.ps1"
+
+# 方式二：自己开管理员终端（安装目录非常规位置时用 DSH_INSTALL_ROOT 指定）
+node "$dsh\profiles\session-autotitle\scripts\repatch-sidebar.mjs"
+```
+
+- 幂等：打过会直接退出（`id: "autotitle"` 标记）。
+- 备份：`client.js.bak-<hash>` 同目录。
+- **DSH 自动更新（dshmarket 替换 app.asar）会冲掉该补丁**，更新后重跑一次即可。
+- 未打补丁时功能不受影响（会话头按钮 + /autotitle + 两个自动触发都在）。
+
+## 思考关线的接线原理（本地 qwen 路由）
+
+标题调用发 `reasoningEffort: 'off'`。dsh-llm 要求路由声明支持 `off`
+（否则 UNSUPPORTED_REASONING_EFFORT）；pi-ai 路由上 `off` 被
+`profileOptions` 折叠为"不发送 reasoning 字段"。宿主半区在挂载时幂等补齐
+（并监听 `settings/updated`）：
+
+1. 已声明 `reasoningEfforts` 但缺 `off` 的模型 → 补 `off: null`；
+2. 推理模型且无思考 wire（`thinkingFormat` 未设置或 `chat-template` 缺参）
+   的模型 → 补 `compat.thinkingFormat: 'chat-template'` +
+   `chatTemplateKwargs.enable_thinking: {$var: thinking.enabled, omitWhenOff: false}`
+   —— 有档位（主对话）→ `true`，off（标题调用）→ `false`。
+
+实测（本机 vLLM qwen3.5-38b，2026-07）：无参数 64 token 预算下可见文本为空
+（思考吞光，即之前的故障）；`enable_thinking: false` 后 8 token / 347ms 返回
+干净标题。
+
+## 安装（已在本机 desktop profile 完成）
+
+1. `profiles/desktop/package.json`：
+   `dependencies` 加 `"@hytime/dsh-session-autotitle": "file:../session-autotitle"`，
+   `dsh.profile.bundles` 追加包名（在 dsh-web-app 之后）。
+2. `pnpm install --dir profiles/desktop`。
+   注意：pnpm 对 file: 依赖不感知新目录（如 test/），需手动同步到
+   `profiles/desktop/node_modules/@hytime/dsh-session-autotitle/`
+   （复制即可；源码目录为唯一真相源）。
+3. 重启 DSH Desktop（bundle 集变化需要重启）。
+
+## 修改与测试
+
+```powershell
+# 单测（在包目录；发布前 npm pack 后可用包内 test/ 跑，@deepseek-ai/* 由
+# 宿主 profile 的 node_modules 提供）
+node --test test/title.test.mjs test/host.test.mjs test/client.test.mjs
+
+# 组合树离线验证（<安装根> = DSH Desktop 安装目录下的 resources/app.asar.unpacked）
+$env:DSH_HOME='<~/.dsh>'
+node '<安装根>\node_modules\@deepseek-ai\dsh\lib\bin.js' --profile desktop --dump-config
+```
+
+## 发布 / 分发
+
+本包即标准 npm 包（`dsh.bundle` manifest + `dsh.client` 声明），发布流程：
+
+1. **源码仓库**：推到 GitHub（如 `github.com/hytime/dsh-session-autotitle`），
+   与 `repository` 字段一致。
+2. **npm 发布**（需拥有 `@hytime` scope 的账号；否则改用自己的 scope）：
+   ```bash
+   npm login            # 或 NPM_TOKEN 环境变量
+   npm publish          # publishConfig.access=public 已声明
+   ```
+3. **他人安装**：DSH Desktop 的市场（dshmarket）装的就是 npm 包——
+   市场搜 `@hytime/dsh-session-autotitle` 安装即可；或手动：
+   `pnpm add @hytime/dsh-session-autotitle`（profile 目录）+
+   `dsh.profile.bundles` 追加包名 + 重启。
+4. **侧边栏菜单条目**不在 npm 包的能力范围内（要写安装目录，需本机 UAC）；
+   市场安装的用户可用会话头按钮 / `/autotitle` / 两个自动触发，
+   想要 `…` 菜单条目就跑包内 `scripts/repatch-sidebar.mjs`（提权）。
+
+## 卸载
+
+1. `profiles/desktop/package.json` 移除依赖与 bundle 条目 → `pnpm install`；
+2. 删除 `profiles/session-autotitle/` 目录；
+3. 侧边栏补丁回滚：把 `client.js.bak-*` 复制回 `client.js`（或从安装备份恢复）；
+4. settings.yaml 中被自动补齐的 `off` 档位/`enable_thinking` 参数可留可删
+   （留着的副作用：composer 里该模型多出 Off 档，无害）；
+5. 重启 DSH。

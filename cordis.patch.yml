@@ -1,0 +1,26 @@
+# @hytime/dsh-session-autotitle：会话自动命名（持久化组合条目）。
+#
+# 组合补丁语义：`name` 是期望守卫而非覆盖（不符即跳过），行 name 不可换；
+# 因此采用「禁用基线行 + 插入新行」：
+#
+# 1) 禁用基线 `session-title-llm` 行（first-prompt provider）。
+#    sessionTitle 服务只允许一个 provider，必须让位。
+# 2) 插入 `session-title-autotitle` 行：全消息总结 provider
+#    （预算内「首条锚点 + 最近窗口」；标题调用关思考）。
+#    首条提示词时刻它退化为“仅首条消息”，与基线时序一致；之后的
+#    手动 /autotitle 与 handoff 触发则覆盖全部用户消息。
+# 3) 插入 `session-autotitle` 行：/autotitle 命令、/handoff 手势钩子、
+#    llm-pi-ai 路由思考接线自补齐（off 档位 + enable_thinking 模板参数）。
+- id: session-title-llm
+  disabled: true
+- insert:
+    - id: session-title-autotitle
+      name: '@hytime/dsh-session-autotitle/title'
+      config:
+        targetWords: 8
+        targetCjkCharacters: 26
+        maxInputBytes: 16384
+        maxOutputTokens: 256
+        timeoutMs: 60000
+    - id: session-autotitle
+      name: '@hytime/dsh-session-autotitle'

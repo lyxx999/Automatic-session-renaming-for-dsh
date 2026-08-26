@@ -1,0 +1,58 @@
+{
+  "name": "@hytime/dsh-session-autotitle",
+  "version": "0.1.0",
+  "description": "DSH 会话自动命名：全消息 LLM 总结标题（首条提示词/handoff 自动 + 菜单/会话头手动），标题调用强制关思考，标题语言可设置。",
+  "scripts": {
+    "repatch": "node scripts/repatch-sidebar.mjs",
+    "test": "node --test test/"
+  },
+  "homepage": "https://github.com/lyxx999/Automatic-session-renaming-for-dsh#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lyxx999/Automatic-session-renaming-for-dsh.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lyxx999/Automatic-session-renaming-for-dsh/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src/",
+    "scripts/repatch-sidebar.mjs",
+    "scripts/repatch-elevated.ps1",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "./src/host.mjs",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./src/host.mjs",
+    "./title": "./src/title.mjs",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session-title": "*",
+    "@deepseek-ai/dsh-timeout": "*"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "session-title",
+    "autotitle"
+  ],
+  "license": "MIT"
+}
