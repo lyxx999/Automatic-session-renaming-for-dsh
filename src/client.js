@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
         'autotitle.aria': '自动重命名会话（LLM 总结）',
         'autotitle.busy': '正在总结…',
         'settings.title': '会话自动命名',
-        'settings.description': '会话标题由 LLM 总结生成（首条提示词后自动命名；/handoff 与"自动重命名"按钮可随时重命名）。可在此设定标题语言。',
+        'settings.description': '会话标题由 LLM 总结生成（首条提示词后自动命名；/handoff 与"自动重命名"按钮可随时重命名）。可在此设定标题语言与标题最大字节数。',
         'settings.language': '标题语言',
         'settings.languageAuto': '跟随消息语言',
         'settings.languageChinese': '中文',
@@ -37,7 +37,10 @@ window.__ModuleLoader__.load({
         'settings.languageCustom': '自定义',
         'settings.customPlaceholder': '如：日本語 / German / Español',
         'settings.customRequired': '请输入语言名称',
-        'settings.current': '当前：{language}',
+        'settings.maxBytes': '标题最大字节数',
+        'settings.maxBytesHint': '1–80 之间的整数（默认 80；80 为系统硬上限）',
+        'settings.maxBytesInvalid': '请输入 1–80 之间的整数',
+        'settings.current': '当前：{language} · 标题 ≤ {bytes} 字节',
         'settings.apply': '应用',
         'settings.saved': '已保存',
         'settings.writeError': '写入失败：{message}',
@@ -50,7 +53,7 @@ window.__ModuleLoader__.load({
         'autotitle.aria': 'Auto rename session (LLM summary)',
         'autotitle.busy': 'Summarizing…',
         'settings.title': 'Session auto-naming',
-        'settings.description': 'Session titles are summarized by the LLM (auto after the first prompt; /handoff and the "Auto rename" button rename on demand). Set the title language here.',
+        'settings.description': 'Session titles are summarized by the LLM (auto after the first prompt; /handoff and the "Auto rename" button rename on demand). Set the title language and max title bytes here.',
         'settings.language': 'Title language',
         'settings.languageAuto': 'Follow message language',
         'settings.languageChinese': 'Chinese',
@@ -58,7 +61,10 @@ window.__ModuleLoader__.load({
         'settings.languageCustom': 'Custom',
         'settings.customPlaceholder': 'e.g. Japanese / German / Español',
         'settings.customRequired': 'Enter a language name',
-        'settings.current': 'Current: {language}',
+        'settings.maxBytes': 'Max title bytes',
+        'settings.maxBytesHint': 'Integer between 1 and 80 (default 80; 80 is the system hard cap)',
+        'settings.maxBytesInvalid': 'Enter an integer between 1 and 80',
+        'settings.current': 'Current: {language} · title ≤ {bytes} bytes',
         'settings.apply': 'Apply',
         'settings.saved': 'Saved',
         'settings.writeError': 'Write failed: {message}',
@@ -71,7 +77,7 @@ window.__ModuleLoader__.load({
         'autotitle.aria': 'セッションを自動名前変更（LLM 要約）',
         'autotitle.busy': '要約中…',
         'settings.title': 'セッション自動命名',
-        'settings.description': 'セッションタイトルは LLM が要約して生成します（最初のプロンプト後に自動命名；/handoff と「自動名前変更」ボタンでいつでも変更）。タイトルの言語を設定できます。',
+        'settings.description': 'セッションタイトルは LLM が要約して生成します（最初のプロンプト後に自動命名；/handoff と「自動名前変更」ボタンでいつでも変更）。タイトルの言語と最大バイト数を設定できます。',
         'settings.language': 'タイトル言語',
         'settings.languageAuto': 'メッセージの言語に従う',
         'settings.languageChinese': '中国語',
@@ -79,7 +85,10 @@ window.__ModuleLoader__.load({
         'settings.languageCustom': 'カスタム',
         'settings.customPlaceholder': '例：日本語 / Deutsch / Español',
         'settings.customRequired': '言語名を入力してください',
-        'settings.current': '現在：{language}',
+        'settings.maxBytes': 'タイトルの最大バイト数',
+        'settings.maxBytesHint': '1〜80 の整数（デフォルト 80。システム上限は 80）',
+        'settings.maxBytesInvalid': '1〜80 の整数を入力してください',
+        'settings.current': '現在：{language} · タイトル ≤ {bytes} バイト',
         'settings.apply': '適用',
         'settings.saved': '保存しました',
         'settings.writeError': '書き込み失敗：{message}',
@@ -92,7 +101,7 @@ window.__ModuleLoader__.load({
         'autotitle.aria': '세션 자동 이름 변경 (LLM 요약)',
         'autotitle.busy': '요약 중…',
         'settings.title': '세션 자동 명명',
-        'settings.description': '세션 제목은 LLM이 요약하여 생성합니다(첫 프롬프트 후 자동 명명; /handoff와 "자동 이름 변경" 버튼으로 언제든 변경). 제목 언어를 설정할 수 있습니다.',
+        'settings.description': '세션 제목은 LLM이 요약하여 생성합니다(첫 프롬프트 후 자동 명명; /handoff와 "자동 이름 변경" 버튼으로 언제든 변경). 제목 언어와 제목 최대 바이트 수를 설정할 수 있습니다.',
         'settings.language': '제목 언어',
         'settings.languageAuto': '메시지 언어 따르기',
         'settings.languageChinese': '중국어',
@@ -100,7 +109,10 @@ window.__ModuleLoader__.load({
         'settings.languageCustom': '사용자 지정',
         'settings.customPlaceholder': '예: 日本語 / Deutsch / Español',
         'settings.customRequired': '언어 이름을 입력하세요',
-        'settings.current': '현재: {language}',
+        'settings.maxBytes': '제목 최대 바이트 수',
+        'settings.maxBytesHint': '1~80 사이의 정수(기본 80. 시스템 한도는 80)',
+        'settings.maxBytesInvalid': '1~80 사이의 정수를 입력하세요',
+        'settings.current': '현재: {language} · 제목 ≤ {bytes} 바이트',
         'settings.apply': '적용',
         'settings.saved': '저장됨',
         'settings.writeError': '쓰기 실패: {message}',
@@ -205,6 +217,9 @@ window.__ModuleLoader__.load({
     }
 
     const DRAFTS = ['auto', 'chinese', 'english', 'custom'];
+    /** 标题字节数合法范围（80 = 服务侧硬上限，默认值）。 */
+    const BYTES_MIN = 1;
+    const BYTES_MAX = 80;
 
     /** 存储值 → 表单状态。空 / 'auto' → 跟随消息语言。 */
     function draftFromValue(value) {
@@ -216,6 +231,15 @@ window.__ModuleLoader__.load({
       return { draft: 'custom', custom: v };
     }
 
+    /** 存储值 → 字节数输入框文本。非法 / 越界 → 默认 80。 */
+    function bytesFromValue(value) {
+      const parsed = typeof value === 'number'
+        ? value
+        : (typeof value === 'string' && value.trim() !== '' ? Number(value.trim()) : NaN);
+      if (!Number.isInteger(parsed) || parsed < BYTES_MIN || parsed > BYTES_MAX) return String(BYTES_MAX);
+      return String(parsed);
+    }
+
     /** 设置分区：标题语言（跟随 / 中文 / English / 自定义）。 */
     function AutotitleSettings(props) {
       const connection = props.__connection;
@@ -224,7 +248,7 @@ window.__ModuleLoader__.load({
         : (key, params) => String(zh[key] || key).replace(/\{(\w+)\}/g, (match, name) => params && name in params ? String(params[name]) : match);
       const theme = settingsPalette();
       const [state, setState] = React.useState({
-        loading: true, nsFound: true, draft: 'auto', custom: '',
+        loading: true, nsFound: true, draft: 'auto', custom: '', maxBytes: String(BYTES_MAX),
         revision: 0, busy: false, error: null, notice: null
       });
 
@@ -247,6 +271,7 @@ window.__ModuleLoader__.load({
             const d = draftFromValue(rawUser.titleLanguage);
             setState((s) => ({
               ...s, loading: false, nsFound: true, draft: d.draft, custom: d.custom,
+              maxBytes: bytesFromValue(rawUser.titleMaxBytes),
               revision: typeof ns.revision === 'number' ? ns.revision : 0
             }));
           })
@@ -272,9 +297,19 @@ window.__ModuleLoader__.load({
             return;
           }
         }
+        const bytesText = String(state.maxBytes).trim();
+        const bytes = bytesText === '' ? NaN : Number(bytesText);
+        if (!Number.isInteger(bytes) || bytes < BYTES_MIN || bytes > BYTES_MAX) {
+          setState((s) => ({ ...s, error: t('settings.maxBytesInvalid') }));
+          return;
+        }
         const ops = value === null
           ? [{ op: 'unset', path: ['titleLanguage'] }]
           : [{ op: 'set', path: ['titleLanguage'], value }];
+        // 默认值 80 → unset（不落冗余键）；其余 → set 整数
+        ops.push(bytes === BYTES_MAX
+          ? { op: 'unset', path: ['titleMaxBytes'] }
+          : { op: 'set', path: ['titleMaxBytes'], value: bytes });
         setState((s) => ({ ...s, busy: true, error: null, notice: null }));
         connection.api.settings
           .mutate({ ns: SETTINGS_NS, ops, expectedRevision: state.revision })
@@ -288,7 +323,7 @@ window.__ModuleLoader__.load({
             const d = draftFromValue(rawUser.titleLanguage);
             setState((s) => ({
               ...s, busy: false, notice: t('settings.saved'),
-              draft: d.draft, custom: d.custom,
+              draft: d.draft, custom: d.custom, maxBytes: bytesFromValue(rawUser.titleMaxBytes),
               revision: next && typeof next.revision === 'number' ? next.revision : s.revision
             }));
           })
@@ -338,7 +373,7 @@ window.__ModuleLoader__.load({
               style: { backgroundColor: theme.group, border: '1px solid ' + theme.border, borderRadius: '8px', boxShadow: theme.shadow, overflow: 'hidden' }
             },
               React.createElement('div', { style: { padding: '7px 8px 1px', fontSize: '12px', color: theme.secondary } },
-                t('settings.current', { language: state.loading ? '…' : currentLabel })
+                t('settings.current', { language: state.loading ? '…' : currentLabel, bytes: state.maxBytes })
               ),
               React.createElement('div', {
                 style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', padding: '6px 8px 8px', borderTop: '1px solid ' + theme.divider }
@@ -361,6 +396,18 @@ window.__ModuleLoader__.load({
                       onChange: (e) => setState((s) => ({ ...s, notice: null, error: null, custom: e.target.value }))
                     })
                   : null,
+                React.createElement('input', {
+                  type: 'number',
+                  min: BYTES_MIN,
+                  max: BYTES_MAX,
+                  step: 1,
+                  value: state.maxBytes,
+                  disabled: state.busy || state.loading,
+                  'aria-label': t('settings.maxBytes'),
+                  title: t('settings.maxBytesHint'),
+                  onChange: (e) => setState((s) => ({ ...s, notice: null, error: null, maxBytes: e.target.value })),
+                  style: { width: '76px', height: '28px', padding: '0 8px', border: '1px solid ' + theme.border, borderRadius: '8px', fontSize: '13px', backgroundColor: theme.field, color: theme.text, outline: 'none', colorScheme: 'light dark' }
+                }),
                 React.createElement('button', {
                   type: 'button',
                   onClick: apply,

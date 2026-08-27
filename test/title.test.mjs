@@ -17,7 +17,7 @@ const CONFIG = {
   timeoutMs: 60000,
 }
 
-function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', finishReason = { kind: 'stop' }, titleLanguage, describe = true } = {}) {
+function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', finishReason = { kind: 'stop' }, titleLanguage, titleMaxBytes, describe = true } = {}) {
   const calls = { resolve: [], stream: [], appends: [], registered: null }
   const ctx = {
     effects: [],
@@ -34,6 +34,7 @@ function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', 
         if (!describe) throw new Error('settings unavailable')
         const user = {}
         if (titleLanguage !== undefined) user.titleLanguage = titleLanguage
+        if (titleMaxBytes !== undefined) user.titleMaxBytes = titleMaxBytes
         return [{ ns: 'llm-pi-ai', value: {}, user, revision: 1 }]
       },
     },
@@ -228,4 +229,45 @@ test('消息选择：超预算 → 首条锚点 + 最近窗口', async () => {
   assert.deepEqual(result.messageSeqs, [1, 4, 5], '保留首条与最近两条，丢弃中间')
   const framed = calls.stream[0].messages[0].content[0].text
   assert.ok(Buffer.byteLength(framed, 'utf8') <= 1200)
+})
+
+test('标题字节数：未设置 → 默认 80（系统指令 + 按 80 截断）', async () => {
+  // 30 个 CJK 字 = 90 字节 → 截断到 80 字节内（26 字 = 78 字节）
+  const { ctx, calls } = makeCtx({ streamText: '字'.repeat(30) })
+  mod.apply(ctx, { ...CONFIG })
+  const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+  const result = await calls.registered.generate(request)
+  assert.ok(calls.stream[0].system.includes('under 80 UTF-8 bytes'), '系统指令要求 80 字节')
+  assert.equal(result.title, '字'.repeat(26), '按 80 字节在字符边界截断')
+})
+
+test('标题字节数：设置 40（数值/字符串）→ 指令要求 40 并按 40 截断', async () => {
+  for (const value of [40, ' 40 ']) {
+    const { ctx, calls } = makeCtx({ streamText: '字'.repeat(30), titleMaxBytes: value })
+    mod.apply(ctx, { ...CONFIG })
+    const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+    const result = await calls.registered.generate(request)
+    assert.ok(calls.stream[0].system.includes('under 40 UTF-8 bytes'), `value=${JSON.stringify(value)} 系统指令要求 40 字节`)
+    // 40 字节 → 13 个 CJK 字（39 字节），第 14 字会越界
+    assert.equal(result.title, '字'.repeat(13))
+    assert.ok(Buffer.byteLength(result.title, 'utf8') <= 40)
+  }
+})
+
+test('标题字节数：非法值（非整数/越界/非数值）→ 回退默认 80，不抛错', async () => {
+  for (const value of ['40abc', 0, -5, 999, 40.5, null, true]) {
+    const { ctx, calls } = makeCtx({ titleMaxBytes: value })
+    mod.apply(ctx, { ...CONFIG })
+    const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+    await calls.registered.generate(request)
+    assert.ok(calls.stream[0].system.includes('under 80 UTF-8 bytes'), `value=${JSON.stringify(value)} 应回退 80`)
+  }
+})
+
+test('标题字节数：describe 不可用 → 回退默认 80，不抛错', async () => {
+  const { ctx, calls } = makeCtx({ describe: false })
+  mod.apply(ctx, { ...CONFIG })
+  const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+  await calls.registered.generate(request)
+  assert.ok(calls.stream[0].system.includes('under 80 UTF-8 bytes'))
 })

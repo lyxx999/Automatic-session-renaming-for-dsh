@@ -269,7 +269,10 @@ test('设置分区：选择中文并应用 → mutate set titleLanguage=Chinese�
   assert.equal(settings.calls.mutate.length, 1)
   assert.deepEqual(settings.calls.mutate[0], {
     ns: 'llm-pi-ai',
-    ops: [{ op: 'set', path: ['titleLanguage'], value: 'Chinese' }],
+    ops: [
+      { op: 'set', path: ['titleLanguage'], value: 'Chinese' },
+      { op: 'unset', path: ['titleMaxBytes'] },
+    ],
     expectedRevision: 7,
   })
   assert.ok(nodeText(renderSection(section, t)).includes('已保存'), '成功 notice')
@@ -282,9 +285,76 @@ test('设置分区：选择中文并应用 → mutate set titleLanguage=Chinese�
   assert.equal(settings.calls.mutate.length, 2)
   assert.deepEqual(settings.calls.mutate[1], {
     ns: 'llm-pi-ai',
-    ops: [{ op: 'unset', path: ['titleLanguage'] }],
+    ops: [
+      { op: 'unset', path: ['titleLanguage'] },
+      { op: 'unset', path: ['titleMaxBytes'] },
+    ],
     expectedRevision: 8,
   })
+})
+
+const findBytesInput = (element) => findNode(element, (n) => n.type === 'input' && n.props.type === 'number')
+
+test('设置分区：加载已存 titleMaxBytes → 输入框映射 + 当前行显示', async () => {
+  const { state, settings } = applyBundle({ user: { titleLanguage: 'English', titleMaxBytes: 40 }, revision: 7 })
+  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
+  const t = (k, params) => String(state.locale.dict.zh[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (params && n in params ? String(params[n]) : m))
+  renderSection(section, t)
+  await tick()
+  const loaded = renderSection(section, t)
+  const input = findBytesInput(loaded)
+  assert.ok(input, '存在字节数输入框')
+  assert.equal(input.props.value, '40', '已存 40 → 输入框 40')
+  assert.equal(input.props.max, 80)
+  assert.ok(nodeText(loaded).includes('≤ 40 字节'), '当前行显示字节数')
+  assert.ok(settings.calls.describe === 1, '挂载时读取一次')
+})
+
+test('设置分区：应用 40 字节 → mutate set titleMaxBytes=40（与语言同批）', async () => {
+  const { state, settings } = applyBundle({ user: {}, revision: 7 })
+  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
+  const t = (k) => state.locale.dict.zh[k]
+  renderSection(section, t)
+  await tick()
+  let element = renderSection(section, t)
+  findBytesInput(element).props.onChange({ target: { value: '40' } })
+  findNode(element, (n) => n.type === 'select').props.onChange({ target: { value: 'english' } })
+  element = renderSection(section, t)
+  findNode(element, (n) => n.type === 'button' && n.props.onClick).props.onClick()
+  await tick()
+  assert.equal(settings.calls.mutate.length, 1)
+  assert.deepEqual(settings.calls.mutate[0], {
+    ns: 'llm-pi-ai',
+    ops: [
+      { op: 'set', path: ['titleLanguage'], value: 'English' },
+      { op: 'set', path: ['titleMaxBytes'], value: 40 },
+    ],
+    expectedRevision: 7,
+  })
+  const after = renderSection(section, t)
+  assert.equal(findBytesInput(after).props.value, '40', '响应回读 40')
+})
+
+test('设置分区：字节数非法（999 / 空）→ 报错不发请求', async () => {
+  for (const bad of ['999', '']) {
+    const { state, settings } = applyBundle({ user: {}, revision: 7 })
+    const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
+    const t = (k) => state.locale.dict.zh[k]
+    renderSection(section, t)
+    await tick()
+    let element = renderSection(section, t)
+    const input = findBytesInput(element)
+    if (bad !== '') input.props.onChange({ target: { value: bad } })
+    else {
+      // 清空：模拟输入框变为空串
+      input.props.onChange({ target: { value: '' } })
+    }
+    element = renderSection(section, t)
+    findNode(element, (n) => n.type === 'button' && n.props.onClick).props.onClick()
+    await tick()
+    assert.equal(settings.calls.mutate.length, 0, '非法字节数不写设置')
+    assert.ok(nodeText(renderSection(section, t)).includes('请输入 1–80 之间的整数'), '显示校验错误')
+  }
 })
 
 test('设置分区：自定义为空时应用 → 报错不发请求', async () => {

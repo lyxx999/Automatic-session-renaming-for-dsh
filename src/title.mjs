@@ -19,6 +19,11 @@ export const name = '@lyxx/dsh-session-autotitle/title'
 export const inject = ['sessionTitle', 'llm']
 
 const TIMEOUT_CODE = 'SESSION_AUTOTITLE_TIMEOUT'
+/**
+ * session-title 服务侧硬上限（组合行配置 maxTitleBytes 的静态值）：
+ * 服务对落库标题统一截断到该值，故用户可配置范围封顶 80。
+ */
+const TITLE_SERVICE_MAX_BYTES = 80
 const CONFIG_KEYS = new Set([
   'targetWords',
   'targetCjkCharacters',
@@ -65,13 +70,13 @@ function resolveConfig(config) {
   return deepFreeze({ ...config })
 }
 
-/** 语言指令（与基线同风格，追加 80 字节长度约定）。language 为空 → 跟随消息语言。 */
-function systemPrompt(config, language) {
+/** 语言/长度指令（与基线同风格）。language 为空 → 跟随消息语言；maxBytes → 字节长度约定。 */
+function systemPrompt(config, language, maxBytes) {
   return [
     'Create a concise title for an AI coding-assistant session from the supplied human messages.',
     'Return only the title on one line, in plain text of natural language, with no quotes, prefix, explanation, Markdown, XML, or terminal control codes. No code is allowed.',
     language === undefined ? 'Use the language of the messages.' : `Write the title in ${language}.`,
-    `Aim for at most ${config.targetWords} words in non-CJK languages or ${config.targetCjkCharacters} CJK characters; the title must stay under 80 UTF-8 bytes.`,
+    `Aim for at most ${config.targetWords} words in non-CJK languages or ${config.targetCjkCharacters} CJK characters; the title must stay under ${maxBytes} UTF-8 bytes.`,
   ].join('\n')
 }
 
@@ -100,6 +105,33 @@ function readTitleLanguage(ctx) {
   const trimmed = value.trim()
   if (trimmed === '' || trimmed.toLowerCase() === 'auto') return undefined
   return trimmed
+}
+
+/**
+ * 读取设置的标题最大字节数（llm-pi-ai 用户层顶层键 titleMaxBytes ——
+ * 与 titleLanguage 同一惯例）。缺省 / 非法 / 越界（1–80）→ 80（默认值；
+ * 80 同时是服务侧硬上限，超限部分仍会被服务截断）。
+ */
+function readTitleMaxBytes(ctx) {
+  let settings
+  if (typeof ctx.get === 'function') settings = ctx.get('settings')
+  else settings = ctx.settings
+  if (settings === null || settings === undefined || typeof settings.describe !== 'function') return TITLE_SERVICE_MAX_BYTES
+  let namespaces
+  try {
+    namespaces = settings.describe()
+  } catch {
+    return TITLE_SERVICE_MAX_BYTES
+  }
+  if (!Array.isArray(namespaces)) return TITLE_SERVICE_MAX_BYTES
+  const ns = namespaces.find((entry) => entry !== null && typeof entry === 'object' && entry.ns === 'llm-pi-ai')
+  const user = ns !== undefined && ns.user !== null && typeof ns.user === 'object' ? ns.user : {}
+  const raw = user.titleMaxBytes
+  const value = typeof raw === 'number'
+    ? raw
+    : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw.trim()) : NaN)
+  if (!Number.isInteger(value) || value < 1 || value > TITLE_SERVICE_MAX_BYTES) return TITLE_SERVICE_MAX_BYTES
+  return value
 }
 
 /** 以 JSON 数组框定消息，用户文本无法破坏结构分隔。 */
@@ -192,7 +224,8 @@ async function generate(config, ctx, request, providerId) {
     }),
   ]
   const language = readTitleLanguage(ctx)
-  const system = systemPrompt(config, language)
+  const maxBytes = readTitleMaxBytes(ctx)
+  const system = systemPrompt(config, language, maxBytes)
   const dl = deadline(request.signal, config.timeoutMs, TIMEOUT_CODE)
   try {
     // 载荷必须纯 JSON 可序列化（session 服务强校验）：language 为
@@ -231,9 +264,10 @@ async function generate(config, ctx, request, providerId) {
     if (blocks.some((block) => block.type === 'tool-call')) {
       throw new Error('session-autotitle: title output must contain text only')
     }
+    // 按用户设置截断（≤ 服务硬上限 80；服务落库时还会以其自身配置再归一一次）。
     const title = normalizeSessionTitle(
       blocks.filter((block) => block.type === 'text').map((block) => block.text).join(' '),
-      Number.MAX_SAFE_INTEGER,
+      maxBytes,
     )
     if (title.length === 0) throw new Error('session-autotitle: title model produced no text')
     return {

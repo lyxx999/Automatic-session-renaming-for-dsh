@@ -14,20 +14,26 @@ DSH 会话自动命名（profile 本地 bundle，更新免疫）。
    - 用户在顶层会话调用 **`/handoff`**（handoff 技能）时自动重命名；
      用户手动钉住的标题（`source.kind === 'user'`）跳过。
 
-3. **标题语言设置**：设置页新增"会话自动命名"分区（在"模型能力与档位"
-   下方），标题语言 = 跟随消息语言（默认）/ 中文 / English / 自定义
-   （任意语言名，如"日本語"）。生成时所选语言写入系统指令。
+3. **标题设置**：设置页新增"会话自动命名"分区（在"模型能力与档位"
+   下方），两项：
+   - **标题语言** = 跟随消息语言（默认）/ 中文 / English / 自定义
+     （任意语言名，如"日本語"）。生成时所选语言写入系统指令；
+    - **标题最大字节数** = 1–80 整数（默认 80）。系统指令要求模型
+     在该字节预算内出题，生成后按此值在 UTF-8 字符边界截断
+     （80 为 session-title 服务侧硬上限，超出仍会被服务截断）。
 
-标题约定：≤ 80 UTF-8 字节（约 26 个汉字），纯文本无引号。
+标题约定：默认 ≤ 80 UTF-8 字节（约 26 个汉字，可在设置中调小），
+纯文本无引号。
 
-### 标题语言的存储
+### 标题设置的存储
 
 插件无法注册新设置命名空间（api-proxy 的 exposedNamespaces 白名单门控），
 故沿用 @hytime/dsh-thinking-effort 的 subagentEffort 惯例：存
-`llm-pi-ai` 命名空间**用户层**顶层键 `titleLanguage`（pi-ai schema 忽略
-该键但原样持久化）。宿主经 `settings.describe()` 的 user 层读取，
-客户端经 `connection.api.settings.describe/mutate` 读写（revision 乐观并发）。
-思考接线自补齐只写 `providers` 字段，不会冲掉该键。
+`llm-pi-ai` 命名空间**用户层**顶层键 `titleLanguage` / `titleMaxBytes`
+（pi-ai schema 忽略该键但原样持久化）。宿主经 `settings.describe()`
+的 user 层读取，客户端经 `connection.api.settings.describe/mutate`
+读写（revision 乐观并发）。思考接线自补齐只写 `providers` 字段，
+不会冲掉这些键。
 
 失败策略：手动触发 → 会话内一行错误 + 宿主日志；自动触发 → 仅宿主日志。
 
@@ -46,8 +52,9 @@ src/host.mjs          宿主：/autotitle 命令、/handoff 手势钩子、
 src/client.js         浏览器：会话头"自动重命名"按钮
                       （conversation.session.header.actions 插槽）+
                       设置分区"会话自动命名"（settings.section 插槽，
-                      标题语言：跟随/中文/English/自定义，zh/en/ja/ko）
-test/                 单元测试（node --test，32 例：title 13 / host 11 / client 8）
+                      标题语言：跟随/中文/English/自定义；
+                       标题最大字节数：1–80 整数，默认 80；zh/en/ja/ko）
+test/                 单元测试（node --test，39 例：title 17 / host 11 / client 11）
 ```
 
 ## 思考关线的接线原理（本地 qwen 路由）
