@@ -242,7 +242,8 @@ window.__ModuleLoader__.load({
 
     /** 设置分区：标题语言（跟随 / 中文 / English / 自定义）。 */
     function AutotitleSettings(props) {
-      const connection = props.__connection;
+      const settings = props.__settings;
+      const settingsNew = !!props.__settingsNew;
       const t = typeof props.t === 'function'
         ? props.t
         : (key, params) => String(zh[key] || key).replace(/\{(\w+)\}/g, (match, name) => params && name in params ? String(params[name]) : match);
@@ -254,14 +255,23 @@ window.__ModuleLoader__.load({
 
       const load = () => {
         setState((s) => ({ ...s, loading: true, error: null }));
-        connection.api.settings
-          .describe({})
+        if (settings === null || settings === undefined) {
+          setState((s) => ({ ...s, loading: false, error: t('settings.readFailed', { message: 'settings wire unavailable' }) }));
+          return;
+        }
+        // 新构建（≥0.1.2）：ctx.remote.settings — describe() 无参、响应扁平 {ok, value}；
+        // 旧构建：connection.api.settings — describe({})、响应 {result: {ok, value}}。
+        Promise.resolve(settingsNew ? settings.describe() : settings.describe({}))
           .then((response) => {
-            if (!response.result.ok) {
-              setState((s) => ({ ...s, loading: false, error: response.result.error.message }));
+            const envelope = settingsNew ? response : (response && response.result);
+            if (!envelope || !envelope.ok) {
+              const message = envelope && envelope.error && envelope.error.message
+                ? envelope.error.message
+                : String(envelope && envelope.error ? envelope.error : 'describe rejected');
+              setState((s) => ({ ...s, loading: false, error: t('settings.readFailed', { message }) }));
               return;
             }
-            const namespaces = response.result.value.namespaces || [];
+            const namespaces = (envelope.value && envelope.value.namespaces) || [];
             const ns = namespaces.find((n) => n.ns === SETTINGS_NS);
             if (!ns) {
               setState((s) => ({ ...s, loading: false, nsFound: false }));
@@ -311,14 +321,21 @@ window.__ModuleLoader__.load({
           ? { op: 'unset', path: ['titleMaxBytes'] }
           : { op: 'set', path: ['titleMaxBytes'], value: bytes });
         setState((s) => ({ ...s, busy: true, error: null, notice: null }));
-        connection.api.settings
-          .mutate({ ns: SETTINGS_NS, ops, expectedRevision: state.revision })
+        // 新构建：mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应；旧构建：对象参数。
+        const expectedRevision = state.revision > 0 ? state.revision : undefined;
+        Promise.resolve(settingsNew
+          ? settings.mutate(SETTINGS_NS, ops, expectedRevision)
+          : settings.mutate({ ns: SETTINGS_NS, ops, expectedRevision: state.revision }))
           .then((response) => {
-            if (!response.result.ok) {
-              setState((s) => ({ ...s, busy: false, error: t('settings.writeError', { message: response.result.error.message }) }));
+            const envelope = settingsNew ? response : (response && response.result);
+            if (!envelope || !envelope.ok) {
+              const message = envelope && envelope.error && envelope.error.message
+                ? envelope.error.message
+                : String(envelope && envelope.error ? envelope.error : 'mutate rejected');
+              setState((s) => ({ ...s, busy: false, error: t('settings.writeError', { message }) }));
               return;
             }
-            const next = response.result.value;
+            const next = envelope.value || {};
             const rawUser = next && next.user && typeof next.user === 'object' ? next.user : {};
             const d = draftFromValue(rawUser.titleLanguage);
             setState((s) => ({
@@ -435,6 +452,10 @@ window.__ModuleLoader__.load({
       const sessions = ctx.sessions;
       const locale = ctx.locale;
       const connection = ctx.connection;
+      const remote = typeof ctx.get === 'function' ? ctx.get('remote') : undefined;
+      // 设置 wire：新构建（≥0.1.2）= ctx.remote.settings；旧构建 = connection.api.settings。
+      const settings = (remote && remote.settings) || (connection && connection.api && connection.api.settings) || null;
+      const settingsNew = !!(remote && remote.settings);
       /** 经既有 wire 触发宿主 /autotitle 命令；未知会话静默。 */
       const run = (sessionId) => {
         const binding = sessions.binding(sessionId);
@@ -455,7 +476,7 @@ window.__ModuleLoader__.load({
           (props) => React.createElement(AutotitleAction, { ...props, run })
         ),
       );
-      if (connection !== null && connection !== undefined && locale !== null && locale !== undefined && typeof locale.bind === 'function') {
+      if (settings !== null && locale !== null && locale !== undefined && typeof locale.bind === 'function') {
         const t = locale.bind(NS);
         ctx.slots.inject('settings.section', () =>
           ctx.slots.register(
@@ -466,7 +487,7 @@ window.__ModuleLoader__.load({
               locale: NS,
               label: () => t('settings.title')
             },
-            (props) => React.createElement(AutotitleSettings, { ...props, __connection: connection })
+            (props) => React.createElement(AutotitleSettings, { ...props, __settings: settings, __settingsNew: settingsNew })
           ),
         );
       }
