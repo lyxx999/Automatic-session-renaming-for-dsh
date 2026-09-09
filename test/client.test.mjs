@@ -86,37 +86,12 @@ test('bundle 经 __ModuleLoader__ 注册一次，id 正确', () => {
   assert.equal(typeof loadCalls[0].factory, 'function')
 })
 
-/** 旧构建 wire：connection.api.settings — describe({}) → {result:{ok,value}}；mutate({ns,ops,expectedRevision})。 */
+/**
+ * DSH ≥0.1.2 设置 wire（ctx.remote.settings）：
+ * describe() 无参 → 扁平 {ok, value}；mutate(ns, ops, expectedRevision) 位置参数。
+ * 命名空间面必须在插件 inject 声明（"remote"、"remote.settings"）。
+ */
 function makeSettingsApi({ user = {}, revision = 7 } = {}) {
-  const calls = { describe: 0, describeArgs: [], mutate: [] }
-  const api = {
-    async describe(...args) {
-      calls.describe += 1
-      calls.describeArgs.push(args)
-      return {
-        result: {
-          ok: true,
-          value: {
-            namespaces: user === null ? [] : [{ ns: 'llm-pi-ai', value: {}, user, revision }],
-          },
-        },
-      }
-    },
-    async mutate(args) {
-      calls.mutate.push(args)
-      const nextUser = { ...user }
-      for (const op of args.ops) {
-        if (op.op === 'set') nextUser[op.path[op.path.length - 1]] = op.value
-        if (op.op === 'unset') delete nextUser[op.path[op.path.length - 1]]
-      }
-      return { result: { ok: true, value: { ns: 'llm-pi-ai', value: {}, user: nextUser, revision: revision + 1 } } }
-    },
-  }
-  return { api, calls }
-}
-
-/** 新构建（≥0.1.2）wire：ctx.remote.settings — describe() 无参 → 扁平 {ok,value}；mutate(ns, ops, expectedRevision) 位置参数。 */
-function makeSettingsApiNew({ user = {}, revision = 7 } = {}) {
   const calls = { describe: 0, describeArgs: [], mutate: [] }
   const applyOps = (nextUser, ops) => {
     for (const op of ops) {
@@ -145,16 +120,9 @@ function makeSettingsApiNew({ user = {}, revision = 7 } = {}) {
   return { api, calls }
 }
 
-/**
- * @param settingsApi - 旧 wire（挂在 connection.api.settings 上）
- * @param options.remote - 新 wire（挂在 ctx.get('remote').settings 上）；
- *                         新构建形态下 connection 存在但没有 .api
- */
-function makeClientCtx(settingsApi, options = {}) {
+/** @param settingsApi - 设置 wire（挂在 ctx.get('remote').settings 上；null = wire 缺失） */
+function makeClientCtx(settingsApi) {
   const state = { locale: null, injects: [], registers: [], effects: 0, commands: [] }
-  const connection = options.connection !== undefined
-    ? options.connection
-    : (settingsApi ? { api: { settings: settingsApi.api } } : undefined)
   const ctx = {
     locale: {
       register(ns, dict) {
@@ -189,10 +157,8 @@ function makeClientCtx(settingsApi, options = {}) {
         }
       },
     },
-    connection,
     get(name) {
-      if (name === 'remote') return options.remote
-      if (name === 'connection') return connection
+      if (name === 'remote') return settingsApi ? { settings: settingsApi.api } : undefined
       return undefined
     },
   }
@@ -201,27 +167,22 @@ function makeClientCtx(settingsApi, options = {}) {
 
 /**
  * @param stateOverrides - {user, revision, user:null 表示命名空间缺失}
- * @param wire - 'legacy'（connection.api.settings）| 'new'（ctx.remote.settings，
- *               connection 存在但无 .api —— 0.1.2 真实形态）| 'none'（两者皆无）
+ * @param wire - 'new'（默认，ctx.remote.settings）| 'none'（设置 wire 缺失）
  */
-function applyBundle(stateOverrides, wire = 'legacy') {
-  const overrides = stateOverrides || {}
-  const legacy = makeSettingsApi(overrides)
-  const fresh = wire === 'new' ? makeSettingsApiNew(overrides) : null
-  const settings = wire === 'new' ? fresh : legacy
-  const ctxOptions = wire === 'legacy' ? {}
-    : wire === 'new' ? { connection: {}, remote: { settings: fresh.api } }
-      : {}
-  const { ctx, state } = makeClientCtx(wire === 'none' ? null : (wire === 'new' ? null : legacy), ctxOptions)
+function applyBundle(stateOverrides, wire = 'new') {
+  const settings = wire === 'none' ? null : makeSettingsApi(stateOverrides || {})
+  const { ctx, state } = makeClientCtx(settings)
   const exports = loadCalls[0].factory(requireStub)
   exports.apply(ctx)
   for (const inject of state.injects) inject.fn()
-  return { ctx, state, settings }
+  return { ctx, state, settings, exports }
 }
 
 test('apply：locale 词典（4 语言）+ 两个插槽注册', () => {
-  const { state } = applyBundle({})
+  const { state, exports } = applyBundle({})
   assert.equal(state.locale.ns, 'session-autotitle')
+  // loader 门禁：访问 remote.settings 命名空间面必须在 inject 声明
+  assert.deepEqual(exports.inject, ['sessions', 'slots', 'locale', 'remote', 'remote.settings'])
   for (const lang of ['zh', 'en', 'ja', 'ko']) {
     assert.ok(state.locale.dict[lang], `词典含 ${lang}`)
     assert.equal(state.locale.dict[lang]['autotitle.label'].length > 0, true)
@@ -438,13 +399,13 @@ test('设置分区：llm-pi-ai 命名空间缺失 → 提示而非崩溃', async
   assert.ok(nodeText(element).includes('未找到 llm-pi-ai'), '显示命名空间缺失提示')
 })
 
-test('新 wire（remote.settings）：describe() 无参 + 扁平响应 → 加载已存值；connection 无 .api 不崩溃', async () => {
+test('remote.settings describe() 无参 + 扁平响应 → 加载已存值', async () => {
   const { state, settings } = applyBundle({ user: { titleLanguage: 'English' }, revision: 7 }, 'new')
   const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
   const t = (k, params) => String(state.locale.dict.zh[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (params && n in params ? String(params[n]) : m))
   renderSection(section, t)
   assert.equal(settings.calls.describe, 1, '挂载时读取一次')
-  assert.deepEqual(settings.calls.describeArgs[0], [], '新构建 describe 无参')
+  assert.deepEqual(settings.calls.describeArgs[0], [], 'describe 无参')
   await tick()
   const loaded = renderSection(section, t)
   const select = findNode(loaded, (n) => n.type === 'select')
@@ -452,65 +413,8 @@ test('新 wire（remote.settings）：describe() 无参 + 扁平响应 → 加�
   assert.ok(nodeText(loaded).includes('当前：English'))
 })
 
-test('新 wire：应用 → mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应 → 已保存', async () => {
-  const { state, settings } = applyBundle({ user: {}, revision: 7 }, 'new')
-  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
-  const t = (k) => state.locale.dict.zh[k]
-  renderSection(section, t)
-  await tick()
-  let element = renderSection(section, t)
-  findNode(element, (n) => n.type === 'select').props.onChange({ target: { value: 'chinese' } })
-  element = renderSection(section, t)
-  findNode(element, (n) => n.type === 'button' && n.props.onClick).props.onClick()
-  await tick()
-  assert.equal(settings.calls.mutate.length, 1)
-  assert.equal(settings.calls.mutate[0].ns, 'llm-pi-ai', 'ns 为第一位置参数')
-  assert.deepEqual(settings.calls.mutate[0].ops, [
-    { op: 'set', path: ['titleLanguage'], value: 'Chinese' },
-    { op: 'unset', path: ['titleMaxBytes'] },
-  ])
-  assert.equal(settings.calls.mutate[0].expectedRevision, 7, 'revision 为第三位置参数')
-  assert.ok(nodeText(renderSection(section, t)).includes('已保存'), '成功 notice')
-})
-
-test('新 wire：应用字节数 40 → mutate 含 set titleMaxBytes=40', async () => {
-  const { state, settings } = applyBundle({ user: {}, revision: 7 }, 'new')
-  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
-  const t = (k) => state.locale.dict.zh[k]
-  renderSection(section, t)
-  await tick()
-  let element = renderSection(section, t)
-  findBytesInput(element).props.onChange({ target: { value: '40' } })
-  element = renderSection(section, t)
-  findNode(element, (n) => n.type === 'button' && n.props.onClick).props.onClick()
-  await tick()
-  assert.equal(settings.calls.mutate.length, 1)
-  assert.deepEqual(settings.calls.mutate[0].ops, [
-    { op: 'unset', path: ['titleLanguage'] },
-    { op: 'set', path: ['titleMaxBytes'], value: 40 },
-  ])
-  const after = renderSection(section, t)
-  assert.equal(findBytesInput(after).props.value, '40', '扁平响应回读 40')
-})
-
-test('新 wire：llm-pi-ai 命名空间缺失 → 提示而非崩溃', async () => {
-  const { state } = applyBundle({ user: null }, 'new')
-  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
-  const t = (k) => state.locale.dict.zh[k]
-  renderSection(section, t)
-  await tick()
-  const element = renderSection(section, t)
-  assert.ok(nodeText(element).includes('未找到 llm-pi-ai'), '显示命名空间缺失提示')
-})
-
-test('无 settings wire（无 remote 且 connection 无 .api）：分区跳过，header 按钮不受影响', () => {
-  const { state } = applyBundle({}, 'none')
-  assert.deepEqual(state.injects.map((i) => i.name), ['conversation.session.header.actions'])
-  assert.equal(state.registers.length, 1)
-})
-
-test('无 connection 时：header 按钮仍在，settings 分区跳过', () => {
-  const { ctx, state } = makeClientCtx(undefined)
+test('无 settings wire（remote 缺失）：分区跳过，header 按钮不受影响', () => {
+  const { ctx, state } = makeClientCtx(null)
   loadCalls[0].factory(requireStub).apply(ctx)
   for (const inject of state.injects) inject.fn()
   assert.deepEqual(state.injects.map((i) => i.name), ['conversation.session.header.actions'])

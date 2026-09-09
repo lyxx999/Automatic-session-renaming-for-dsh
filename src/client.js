@@ -7,8 +7,9 @@
  * 2) 设置页（settings.section）注册"会话自动命名"分区：设定标题生成语言
  *    （跟随消息语言 / 中文 / English / 自定义）。存储在 llm-pi-ai 用户层
  *    顶层键 titleLanguage（与 @hytime/dsh-thinking-effort 的 subagentEffort
- *    同一惯例：schema 忽略该键但原样持久化），经标准
- *    connection.api.settings.describe / mutate 读写。
+ *    同一惯例：schema 忽略该键但原样持久化），经 ctx.remote.settings
+ *    的 describe()/mutate() 读写（DSH ≥0.1.2 设置 wire；命名空间面必须
+ *    在 inject 声明，否则 loader 门禁拒绝访问）。
  *
  * 本文件即产物 bundle：CJS 工厂经 window.__ModuleLoader__.load 注册
  * （手写、内联样式、零构建，与 @hytime/dsh-thinking-effort 同格式）。
@@ -243,7 +244,6 @@ window.__ModuleLoader__.load({
     /** 设置分区：标题语言（跟随 / 中文 / English / 自定义）。 */
     function AutotitleSettings(props) {
       const settings = props.__settings;
-      const settingsNew = !!props.__settingsNew;
       const t = typeof props.t === 'function'
         ? props.t
         : (key, params) => String(zh[key] || key).replace(/\{(\w+)\}/g, (match, name) => params && name in params ? String(params[name]) : match);
@@ -259,19 +259,17 @@ window.__ModuleLoader__.load({
           setState((s) => ({ ...s, loading: false, error: t('settings.readFailed', { message: 'settings wire unavailable' }) }));
           return;
         }
-        // 新构建（≥0.1.2）：ctx.remote.settings — describe() 无参、响应扁平 {ok, value}；
-        // 旧构建：connection.api.settings — describe({})、响应 {result: {ok, value}}。
-        Promise.resolve(settingsNew ? settings.describe() : settings.describe({}))
+        // ctx.remote.settings：describe() 无参、响应扁平 {ok, value}
+        Promise.resolve(settings.describe())
           .then((response) => {
-            const envelope = settingsNew ? response : (response && response.result);
-            if (!envelope || !envelope.ok) {
-              const message = envelope && envelope.error && envelope.error.message
-                ? envelope.error.message
-                : String(envelope && envelope.error ? envelope.error : 'describe rejected');
+            if (!response || !response.ok) {
+              const message = response && response.error && response.error.message
+                ? response.error.message
+                : String(response && response.error ? response.error : 'describe rejected');
               setState((s) => ({ ...s, loading: false, error: t('settings.readFailed', { message }) }));
               return;
             }
-            const namespaces = (envelope.value && envelope.value.namespaces) || [];
+            const namespaces = (response.value && response.value.namespaces) || [];
             const ns = namespaces.find((n) => n.ns === SETTINGS_NS);
             if (!ns) {
               setState((s) => ({ ...s, loading: false, nsFound: false }));
@@ -321,21 +319,18 @@ window.__ModuleLoader__.load({
           ? { op: 'unset', path: ['titleMaxBytes'] }
           : { op: 'set', path: ['titleMaxBytes'], value: bytes });
         setState((s) => ({ ...s, busy: true, error: null, notice: null }));
-        // 新构建：mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应；旧构建：对象参数。
+        // ctx.remote.settings：mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应
         const expectedRevision = state.revision > 0 ? state.revision : undefined;
-        Promise.resolve(settingsNew
-          ? settings.mutate(SETTINGS_NS, ops, expectedRevision)
-          : settings.mutate({ ns: SETTINGS_NS, ops, expectedRevision: state.revision }))
+        Promise.resolve(settings.mutate(SETTINGS_NS, ops, expectedRevision))
           .then((response) => {
-            const envelope = settingsNew ? response : (response && response.result);
-            if (!envelope || !envelope.ok) {
-              const message = envelope && envelope.error && envelope.error.message
-                ? envelope.error.message
-                : String(envelope && envelope.error ? envelope.error : 'mutate rejected');
+            if (!response || !response.ok) {
+              const message = response && response.error && response.error.message
+                ? response.error.message
+                : String(response && response.error ? response.error : 'mutate rejected');
               setState((s) => ({ ...s, busy: false, error: t('settings.writeError', { message }) }));
               return;
             }
-            const next = envelope.value || {};
+            const next = response.value || {};
             const rawUser = next && next.user && typeof next.user === 'object' ? next.user : {};
             const d = draftFromValue(rawUser.titleLanguage);
             setState((s) => ({
@@ -451,11 +446,10 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       const sessions = ctx.sessions;
       const locale = ctx.locale;
-      const connection = ctx.connection;
-      const remote = typeof ctx.get === 'function' ? ctx.get('remote') : undefined;
-      // 设置 wire：新构建（≥0.1.2）= ctx.remote.settings；旧构建 = connection.api.settings。
-      const settings = (remote && remote.settings) || (connection && connection.api && connection.api.settings) || null;
-      const settingsNew = !!(remote && remote.settings);
+      // 设置 wire（DSH ≥0.1.2）：ctx.remote.settings。remote.settings 命名空间面
+      // 必须在 inject 声明（"remote"、"remote.settings"），否则 loader 门禁拒绝访问。
+      const remote = ctx.get('remote');
+      const settings = (remote && remote.settings) || null;
       /** 经既有 wire 触发宿主 /autotitle 命令；未知会话静默。 */
       const run = (sessionId) => {
         const binding = sessions.binding(sessionId);
@@ -487,7 +481,7 @@ window.__ModuleLoader__.load({
               locale: NS,
               label: () => t('settings.title')
             },
-            (props) => React.createElement(AutotitleSettings, { ...props, __settings: settings, __settingsNew: settingsNew })
+            (props) => React.createElement(AutotitleSettings, { ...props, __settings: settings })
           ),
         );
       }
@@ -502,7 +496,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply;
-    exports.inject = ['sessions', 'slots', 'locale', 'connection'];
+    exports.inject = ['sessions', 'slots', 'locale', 'remote', 'remote.settings'];
     return module.exports;
   }
 });
