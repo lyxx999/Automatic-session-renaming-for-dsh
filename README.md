@@ -2,6 +2,20 @@
 
 DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
+## 适配版本（DSH 兼容性）
+
+- **最低版本：DSH ≥ 0.1.2-rc.1**（宿主半区依赖 `@deepseek-ai/dsh-llm` 的
+  `BlockAssembler` / `createUserMessage`、`@deepseek-ai/dsh-timeout` 的
+  `deadline`、`@deepseek-ai/dsh-session-title` 的
+  `SessionTitleProviderId` / `normalizeSessionTitle`，以及
+  `sessionTitle` 服务的 `register` 提供方 API——均为 0.1.2-rc.1 已核对的导出）。
+- `deepFreeze` 来自 `@deepseek-ai/dsh-util-values`（**不是** dsh-llm 的导出，
+  dsh-llm 仅内部使用）；0.2.3 已修正导入来源。
+- **客户端**（设置分区 + 会话头按钮）需 DSH 0.1.2 起的新设置线
+  `ctx.remote.settings`（旧线 `connection.api.settings` 已带回退）。
+- 更早版本（< 0.1.2-rc.1）：宿主半区可能因缺少上述导出而加载失败，
+  客户端设置区可能不渲染。安装前请确认 DSH 版本 ≥ 0.1.2-rc.1。
+
 ## 功能
 
 1. **手动触发**：会话头操作行的"自动重命名"按钮，或会话内输入 `/autotitle`

@@ -11,7 +11,11 @@
  *   行为与基线一致；之后的 /autotitle 与 handoff 触发覆盖全部消息。
  */
 import { Buffer } from 'node:buffer'
-import { BlockAssembler, createUserMessage, deepFreeze } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
+// deepFreeze 是 dsh-util-values 的导出（dsh-llm 内部使用它但不转出）：
+// 从错误来源包导入会在链接期抛 "does not provide an export named 'deepFreeze'"，
+// 导致整个插件树加载失败（0.2.3 修复）。
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import { MAX_TIMER_DELAY_MS, deadline } from '@deepseek-ai/dsh-timeout'
 import { SessionTitleProviderId, normalizeSessionTitle } from '@deepseek-ai/dsh-session-title'
 
