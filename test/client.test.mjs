@@ -91,7 +91,12 @@ test('bundle 经 __ModuleLoader__ 注册一次，id 正确', () => {
  * describe() 无参 → 扁平 {ok, value}；mutate(ns, ops, expectedRevision) 位置参数。
  * 命名空间面必须在插件 inject 声明（"remote"、"remote.settings"）。
  */
-function makeSettingsApi({ user = {}, revision = 7 } = {}) {
+/**
+ * legacyOnly = false（默认，0.2.0 entry-config 宿主）：值在插件自有节
+ * session-autotitle，llm-pi-ai 节存在但 user 层无旧键。
+ * legacyOnly = true（≤0.1.6 namespace 宿主）：无自有节，值在 llm-pi-ai 节。
+ */
+function makeSettingsApi({ user = {}, revision = 7, legacyOnly = false } = {}) {
   const calls = { describe: 0, describeArgs: [], mutate: [] }
   const applyOps = (nextUser, ops) => {
     for (const op of ops) {
@@ -104,12 +109,15 @@ function makeSettingsApi({ user = {}, revision = 7 } = {}) {
     async describe(...args) {
       calls.describe += 1
       calls.describeArgs.push(args)
-      return {
-        ok: true,
-        value: {
-          namespaces: user === null ? [] : [{ ns: 'llm-pi-ai', value: {}, user, revision }],
-        },
-      }
+      const rows = user === null
+        ? []
+        : (legacyOnly
+          ? [{ ns: 'llm-pi-ai', value: {}, user, revision }]
+          : [
+              { ns: 'session-autotitle', value: {}, user, revision },
+              { ns: 'llm-pi-ai', value: {}, user: {}, revision: revision + 1 },
+            ])
+      return { ok: true, value: { namespaces: rows } }
     },
     async mutate(ns, ops, expectedRevision) {
       calls.mutate.push({ ns, ops, expectedRevision })
@@ -285,7 +293,7 @@ test('设置分区：选择中文并应用 → mutate set titleLanguage=Chinese�
   await tick()
   assert.equal(settings.calls.mutate.length, 1)
   assert.deepEqual(settings.calls.mutate[0], {
-    ns: 'llm-pi-ai',
+    ns: 'session-autotitle',
     ops: [
       { op: 'set', path: ['titleLanguage'], value: 'Chinese' },
       { op: 'unset', path: ['titleMaxBytes'] },
@@ -301,7 +309,7 @@ test('设置分区：选择中文并应用 → mutate set titleLanguage=Chinese�
   await tick()
   assert.equal(settings.calls.mutate.length, 2)
   assert.deepEqual(settings.calls.mutate[1], {
-    ns: 'llm-pi-ai',
+    ns: 'session-autotitle',
     ops: [
       { op: 'unset', path: ['titleLanguage'] },
       { op: 'unset', path: ['titleMaxBytes'] },
@@ -341,7 +349,7 @@ test('设置分区：应用 40 字节 → mutate set titleMaxBytes=40（与语�
   await tick()
   assert.equal(settings.calls.mutate.length, 1)
   assert.deepEqual(settings.calls.mutate[0], {
-    ns: 'llm-pi-ai',
+    ns: 'session-autotitle',
     ops: [
       { op: 'set', path: ['titleLanguage'], value: 'English' },
       { op: 'set', path: ['titleMaxBytes'], value: 40 },
@@ -389,14 +397,34 @@ test('设置分区：自定义为空时应用 → 报错不发请求', async () 
   assert.ok(nodeText(renderSection(section, t)).includes('请输入语言名称'))
 })
 
-test('设置分区：llm-pi-ai 命名空间缺失 → 提示而非崩溃', async () => {
+test('设置分区：两个命名空间都缺失 → 提示而非崩溃', async () => {
   const { state } = applyBundle({ user: null })
   const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
   const t = (k) => state.locale.dict.zh[k]
   renderSection(section, t)
   await tick()
   const element = renderSection(section, t)
-  assert.ok(nodeText(element).includes('未找到 llm-pi-ai'), '显示命名空间缺失提示')
+  assert.ok(nodeText(element).includes('未找到设置命名空间'), '显示命名空间缺失提示')
+})
+
+test('设置分区：≤0.1.6 宿主（无自有节）→ 回退 llm-pi-ai 读写', async () => {
+  const { state, settings } = applyBundle({ user: { titleLanguage: 'Chinese' }, revision: 7, legacyOnly: true })
+  const section = state.registers.find((r) => r.options.id === 'session-autotitle-settings').component
+  const t = (k, params) => String(state.locale.dict.zh[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (params && n in params ? String(params[n]) : m))
+  renderSection(section, t)
+  await tick()
+  const loaded = renderSection(section, t)
+  const select = findNode(loaded, (n) => n.type === 'select')
+  assert.equal(select.props.value, 'chinese', '旧节已存值被读出')
+
+  let element = renderSection(section, t)
+  findNode(element, (n) => n.type === 'select').props.onChange({ target: { value: 'english' } })
+  element = renderSection(section, t)
+  findNode(element, (n) => n.type === 'button' && n.props.onClick).props.onClick()
+  await tick()
+  assert.equal(settings.calls.mutate.length, 1)
+  assert.equal(settings.calls.mutate[0].ns, 'llm-pi-ai', '旧宿主写回 llm-pi-ai')
+  assert.deepEqual(settings.calls.mutate[0].ops[0], { op: 'set', path: ['titleLanguage'], value: 'English' })
 })
 
 test('remote.settings describe() 无参 + 扁平响应 → 加载已存值', async () => {

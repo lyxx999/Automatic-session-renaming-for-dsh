@@ -2,9 +2,27 @@
 
 DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
+## 更新历史
+
+- **0.2.5**（本次）：适配 DSH 0.2.0 的设置服务改造（entry-config 模型）。
+  0.2.0 移除了 `settings.get()` 且写入只接受 volatile 路径——0.2.4 的思考
+  接线自补齐因此静默失效（`llm-pi-ai` 未写入 `enable_thinking` wire），
+  标题调用（256 token 预算）被思考吞光 → `/autotitle` 报
+  "title output reached maxOutputTokens"。0.2.5 起：
+  - 自补齐改为双设置模型兼容：`describe()` 读（value 判定 / user 层引用）、
+    `mutate()` 写 `providers` volatile 子路径（整数组 op，不钉 schema 默认值），
+    变更事件按模型探测（entry-config 发 `settings/document-updated`）；
+  - 标题语言/字节数设置移入插件自有条目 `session-autotitle`
+    （宿主半区导出的 `Config` schema 派生的设置节，根 volatile）；
+    ≤0.1.6 宿主回退旧 `llm-pi-ai` 键。**注意**：0.2.0 下旧键的表单投影
+    不含 `titleLanguage`/`titleMaxBytes`（schema 未声明），0.1.7 之前设置过
+    的值在 0.2.0 宿主上不可见——升级后请在设置页重设一次。
+- **0.2.4**：修复 v4 宿主的 source 拒收（见下）。
+
 ## 适配版本（DSH 兼容性）
 
-- **当前版本适配：DSH ≥ 0.2.0-rc.2（会话格式 v4）**。0.2.4 起标题请求
+- **当前版本适配：DSH ≥ 0.2.0-rc.2（会话格式 v4 + 0.2.0 设置模型）**。
+  0.2.4 起标题请求
   消息的 source 写为 v4 producer-owned kind `plugin:dsh-session-autotitle`
   （未知第三方插件的 v4 规范写法，与 v3→v4 迁移对插件源的产出一致）。
   **原因**：v4 的写入路径（`dsh-session-format-v3-to-v4` 的
@@ -49,13 +67,18 @@ DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
 ### 标题设置的存储
 
-插件无法注册新设置命名空间（api-proxy 的 exposedNamespaces 白名单门控），
-故沿用 @hytime/dsh-thinking-effort 的 subagentEffort 惯例：存
-`llm-pi-ai` 命名空间**用户层**顶层键 `titleLanguage` / `titleMaxBytes`
-（pi-ai schema 忽略该键但原样持久化）。宿主经 `settings.describe()`
-的 user 层读取，客户端经 `connection.api.settings.describe/mutate`
-读写（revision 乐观并发）。思考接线自补齐只写 `providers` 字段，
-不会冲掉这些键。
+- **DSH 0.1.7+（含 0.2.0 entry-config 模型）**：存插件自有条目
+  `session-autotitle`（宿主半区导出的 `Config` schema ——
+  `titleLanguage` / `titleMaxBytes`，根 volatile）派生的设置节。
+  原因：0.2.0 下 `llm-pi-ai` 的 Config 只声明 `providers` 为 volatile，
+  旧键既读不到（表单投影剥离）也写不进（volatile 路径门禁拒绝）。
+- **DSH ≤ 0.1.6（namespace 模型）**：回退存 `llm-pi-ai` 用户层顶层键
+  `titleLanguage` / `titleMaxBytes`（与 @hytime/dsh-thinking-effort 的
+  subagentEffort 同一惯例）。
+- 宿主侧读取自有条目优先、旧键回退；客户端经设置 wire
+  `describe()`/`mutate()` 读写（revision 乐观并发），目标节由
+  `describe()` 返回的节列表解析（自有节优先）。思考接线自补齐只写
+  `providers` volatile 子路径，不会冲掉这些键。
 
 失败策略：手动触发 → 会话内一行错误 + 宿主日志；自动触发 → 仅宿主日志。
 
@@ -69,14 +92,17 @@ cordis.patch.yml      组合补丁：禁用基线 session-title-llm 行；
 src/title.mjs         宿主：全消息标题提供方（首条锚点+最近窗口，
                       16KB 预算；reasoningEffort 'off' + 不支持时回退）
 src/host.mjs          宿主：/autotitle 命令、/handoff 手势钩子、
-                      llm-pi-ai 路由思考接线自补齐（off 档位 +
-                      chat_template_kwargs.enable_thinking）
+                       llm-pi-ai 路由思考接线自补齐（off 档位 +
+                       chat_template_kwargs.enable_thinking；
+                       双设置模型：describe 读 / mutate 写 volatile
+                       子路径 / 模型探测变更事件）、导出 Config
+                       （插件自有设置节，0.1.7+）
 src/client.js         浏览器：会话头"自动重命名"按钮
                       （conversation.session.header.actions 插槽）+
                       设置分区"会话自动命名"（settings.section 插槽，
                       标题语言：跟随/中文/English/自定义；
                        标题最大字节数：1–80 整数，默认 80；zh/en/ja/ko）
-test/                 单元测试（node --test，41 例：title 18 / host 11 / client 12）
+test/                 单元测试（node --test，46 例：title 20 / host 13 / client 13）
 ```
 
 ## 思考关线的接线原理（本地 qwen 路由）
@@ -84,7 +110,11 @@ test/                 单元测试（node --test，41 例：title 18 / host 11 /
 标题调用发 `reasoningEffort: 'off'`。dsh-llm 要求路由声明支持 `off`
 （否则 UNSUPPORTED_REASONING_EFFORT）；pi-ai 路由上 `off` 被
 `profileOptions` 折叠为"不发送 reasoning 字段"。宿主半区在挂载时幂等补齐
-（并监听 `settings/updated`）：
+（带重试，并监听设置变更事件——按设置服务模型探测：0.2.0 entry-config
+模型发 `settings/document-updated`，旧 namespace 模型发 `settings/updated`）。
+读取经 `describe()`（value 层判定缺什么、user 层提供引用），写入经
+`mutate()` 的 `providers` volatile 子路径（models 数组容器整体写；载荷只
+引用用户层条目，不钉 schema 默认值）：
 
 1. 已声明 `reasoningEfforts` 但缺 `off` 的模型 → 补 `off: null`；
 2. 推理模型且无思考 wire（`thinkingFormat` 未设置或 `chat-template` 缺参）
@@ -92,9 +122,12 @@ test/                 单元测试（node --test，41 例：title 18 / host 11 /
    `chatTemplateKwargs.enable_thinking: {$var: thinking.enabled, omitWhenOff: false}`
    —— 有档位（主对话）→ `true`，off（标题调用）→ `false`。
 
-实测（本机 vLLM qwen3.5-38b，2026-07）：无参数 64 token 预算下可见文本为空
-（思考吞光，即之前的故障）；`enable_thinking: false` 后 8 token / 347ms 返回
-干净标题。
+实测（本机 vLLM qwen3.5-38b）：2026-07，无参数 64 token 预算下可见文本为空
+（思考吞光，即当时的故障）；`enable_thinking: false` 后 8 token / 347ms 返回
+干净标题。2026-10 复测（0.2.0 宿主）：256 token 预算下不发参数 →
+finish_reason `max-tokens`（约 100 token 被思考吞掉，可见文本为空，即
+"title output reached maxOutputTokens" 的成因）；发
+`chat_template_kwargs: {enable_thinking: false}` → 15 token / 267ms 干净标题。
 
 ## 安装（已在本机 desktop profile 完成）
 
@@ -123,9 +156,9 @@ node '<安装根>\node_modules\@deepseek-ai\dsh\lib\bin.js' --profile desktop --
 
 本包即标准 npm 包（`dsh.bundle` manifest + `dsh.client` 声明），发布流程：
 
-1. **源码仓库**：推到 GitHub（如 `github.com/hytime/dsh-session-autotitle`），
+1. **源码仓库**：推到 GitHub（`github.com/lyxx999/Automatic-session-renaming-for-dsh`），
    与 `repository` 字段一致。
-2. **npm 发布**（需拥有 `@hytime` scope 的账号；否则改用自己的 scope）：
+2. **npm 发布**（需拥有 `@lyxx` scope 的账号）：
    ```bash
    npm login            # 或 NPM_TOKEN 环境变量
    npm publish          # publishConfig.access=public 已声明
@@ -139,6 +172,7 @@ node '<安装根>\node_modules\@deepseek-ai\dsh\lib\bin.js' --profile desktop --
 
 1. `profiles/desktop/package.json` 移除依赖与 bundle 条目 → `pnpm install`；
 2. 删除 `profiles/session-autotitle/` 目录；
-3. settings.yaml 中被自动补齐的 `off` 档位/`enable_thinking` 参数可留可删
-   （留着的副作用：composer 里该模型多出 Off 档，无害）；
+3. cordis.patch.yml 中被自动补齐的 `off` 档位/`enable_thinking` 参数可留可删
+   （留着的副作用：composer 里该模型多出 Off 档，无害）；0.1.7+ 宿主下
+   插件自有条目里的 `titleLanguage`/`titleMaxBytes` 亦可删；
 4. 重启 DSH。

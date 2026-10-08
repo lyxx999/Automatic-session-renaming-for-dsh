@@ -84,13 +84,18 @@ function systemPrompt(config, language, maxBytes) {
   ].join('\n')
 }
 
+/** 插件自有设置条目 id（0.1.7+ 从宿主半区导出的 Config schema 派生）。 */
+const OWN_NS = 'session-autotitle'
+/** 旧存储位置：≤0.1.6 namespace 模型宿主仍可读到旧键。 */
+const LEGACY_NS = 'llm-pi-ai'
+
 /**
- * 读取设置的标题语言（llm-pi-ai 用户层顶层键 titleLanguage —— 与
- * @hytime/dsh-thinking-effort 的 subagentEffort 同一惯例：插件无法注册
- * 新命名空间，schema 忽略该键但原样持久化，故从 describe 的 user 层读）。
- * 空 / 'auto' / 读取失败 → undefined（跟随消息语言，行为同今日）。
+ * 读一个设置键的 user 层值：本条目（session-autotitle）优先，回退旧
+ * llm-pi-ai 键。0.2.0 entry-config 模型下 llm-pi-ai 的表单投影只含
+ * providers（schema 未声明旧键），0.1.7 之前写入的值不可见 —— 升级用户
+ * 需在设置页重设一次（README 已注明）。读取失败 → undefined。
  */
-function readTitleLanguage(ctx) {
+function readSettingValue(ctx, key) {
   let settings
   if (typeof ctx.get === 'function') settings = ctx.get('settings')
   else settings = ctx.settings
@@ -102,9 +107,20 @@ function readTitleLanguage(ctx) {
     return undefined
   }
   if (!Array.isArray(namespaces)) return undefined
-  const ns = namespaces.find((entry) => entry !== null && typeof entry === 'object' && entry.ns === 'llm-pi-ai')
-  const user = ns !== undefined && ns.user !== null && typeof ns.user === 'object' ? ns.user : {}
-  const value = user.titleLanguage
+  for (const ns of [OWN_NS, LEGACY_NS]) {
+    const row = namespaces.find((entry) => entry !== null && typeof entry === 'object' && entry.ns === ns)
+    const user = row !== undefined && row.user !== null && typeof row.user === 'object' ? row.user : {}
+    if (Object.prototype.hasOwnProperty.call(user, key)) return user[key]
+  }
+  return undefined
+}
+
+/**
+ * 读取设置的标题语言。空 / 'auto' / 读取失败 → undefined（跟随消息
+ * 语言，行为同今日）。
+ */
+function readTitleLanguage(ctx) {
+  const value = readSettingValue(ctx, 'titleLanguage')
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (trimmed === '' || trimmed.toLowerCase() === 'auto') return undefined
@@ -112,25 +128,11 @@ function readTitleLanguage(ctx) {
 }
 
 /**
- * 读取设置的标题最大字节数（llm-pi-ai 用户层顶层键 titleMaxBytes ——
- * 与 titleLanguage 同一惯例）。缺省 / 非法 / 越界（1–80）→ 80（默认值；
+ * 读取设置的标题最大字节数。缺省 / 非法 / 越界（1–80）→ 80（默认值；
  * 80 同时是服务侧硬上限，超限部分仍会被服务截断）。
  */
 function readTitleMaxBytes(ctx) {
-  let settings
-  if (typeof ctx.get === 'function') settings = ctx.get('settings')
-  else settings = ctx.settings
-  if (settings === null || settings === undefined || typeof settings.describe !== 'function') return TITLE_SERVICE_MAX_BYTES
-  let namespaces
-  try {
-    namespaces = settings.describe()
-  } catch {
-    return TITLE_SERVICE_MAX_BYTES
-  }
-  if (!Array.isArray(namespaces)) return TITLE_SERVICE_MAX_BYTES
-  const ns = namespaces.find((entry) => entry !== null && typeof entry === 'object' && entry.ns === 'llm-pi-ai')
-  const user = ns !== undefined && ns.user !== null && typeof ns.user === 'object' ? ns.user : {}
-  const raw = user.titleMaxBytes
+  const raw = readSettingValue(ctx, 'titleMaxBytes')
   const value = typeof raw === 'number'
     ? raw
     : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw.trim()) : NaN)

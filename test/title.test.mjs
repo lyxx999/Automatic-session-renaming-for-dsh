@@ -17,7 +17,7 @@ const CONFIG = {
   timeoutMs: 60000,
 }
 
-function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', finishReason = { kind: 'stop' }, titleLanguage, titleMaxBytes, describe = true } = {}) {
+function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', finishReason = { kind: 'stop' }, titleLanguage, titleMaxBytes, legacyTitleLanguage, legacyTitleMaxBytes, describe = true } = {}) {
   const calls = { resolve: [], stream: [], appends: [], registered: null }
   const ctx = {
     effects: [],
@@ -32,10 +32,17 @@ function makeCtx({ supportOff = true, streamText = 'DSH 会话自动重命名', 
     settings: {
       describe() {
         if (!describe) throw new Error('settings unavailable')
-        const user = {}
-        if (titleLanguage !== undefined) user.titleLanguage = titleLanguage
-        if (titleMaxBytes !== undefined) user.titleMaxBytes = titleMaxBytes
-        return [{ ns: 'llm-pi-ai', value: {}, user, revision: 1 }]
+        // 自有条目（0.1.7+ 主存储）
+        const own = {}
+        if (titleLanguage !== undefined) own.titleLanguage = titleLanguage
+        if (titleMaxBytes !== undefined) own.titleMaxBytes = titleMaxBytes
+        const rows = [{ ns: 'session-autotitle', value: {}, user: own, revision: 1 }]
+        // 旧 llm-pi-ai 键（≤0.1.6 存储位置，回退）
+        const legacy = {}
+        if (legacyTitleLanguage !== undefined) legacy.titleLanguage = legacyTitleLanguage
+        if (legacyTitleMaxBytes !== undefined) legacy.titleMaxBytes = legacyTitleMaxBytes
+        rows.push({ ns: 'llm-pi-ai', value: {}, user: legacy, revision: 2 })
+        return rows
       },
     },
     sessionTitle: {
@@ -236,6 +243,23 @@ test('标题语言：describe 不可用 / 非字符串 → 回退跟随，不抛
   const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
   await calls.registered.generate(request)
   assert.ok(calls.stream[0].system.includes('Use the language of the messages.'))
+})
+
+test('标题语言：自有条目为空 → 回退旧 llm-pi-ai 键（≤0.1.6 宿主）', async () => {
+  const { ctx, calls } = makeCtx({ legacyTitleLanguage: 'Chinese' })
+  mod.apply(ctx, { ...CONFIG })
+  const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+  await calls.registered.generate(request)
+  assert.ok(calls.stream[0].system.includes('Write the title in Chinese.'), '旧键值生效')
+})
+
+test('标题语言/字节数：自有条目优先于旧键（双位置冲突时）', async () => {
+  const { ctx, calls } = makeCtx({ titleLanguage: 'English', legacyTitleLanguage: 'Chinese', titleMaxBytes: 40, legacyTitleMaxBytes: 30 })
+  mod.apply(ctx, { ...CONFIG })
+  const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
+  await calls.registered.generate(request)
+  assert.ok(calls.stream[0].system.includes('Write the title in English.'), '自有语言优先')
+  assert.ok(calls.stream[0].system.includes('under 40 UTF-8 bytes'), '自有字节数优先')
 })
 
 test('消息选择：超预算 → 首条锚点 + 最近窗口', async () => {

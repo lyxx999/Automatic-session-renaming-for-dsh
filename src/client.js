@@ -5,10 +5,12 @@
  *    按钮：点击走既有 wire（session.command('/autotitle')）触发宿主侧 LLM
  *    总结重命名；失败 → 命令结果以一行错误显示在会话中。
  * 2) 设置页（settings.section）注册"会话自动命名"分区：设定标题生成语言
- *    （跟随消息语言 / 中文 / English / 自定义）。存储在 llm-pi-ai 用户层
- *    顶层键 titleLanguage（与 @hytime/dsh-thinking-effort 的 subagentEffort
- *    同一惯例：schema 忽略该键但原样持久化），经 ctx.remote.settings
- *    的 describe()/mutate() 读写（DSH ≥0.1.2 设置 wire；命名空间面必须
+ *    （跟随消息语言 / 中文 / English / 自定义）与标题最大字节数。
+ *    DSH 0.1.7+（含 0.2.0 entry-config 模型）存储在插件自有条目
+ *    session-autotitle（宿主半区导出的 Config schema 派生的设置节）；
+ *    ≤0.1.6 namespace 模型宿主无该节，回退旧 llm-pi-ai 顶层键
+ *    titleLanguage/titleMaxBytes。经 ctx.remote.settings 的
+ *    describe()/mutate() 读写（DSH ≥0.1.2 设置 wire；命名空间面必须
  *    在 inject 声明，否则 loader 门禁拒绝访问）。
  *
  * 本文件即产物 bundle：CJS 工厂经 window.__ModuleLoader__.load 注册
@@ -23,7 +25,10 @@ window.__ModuleLoader__.load({
     const React = require('react');
 
     const NS = 'session-autotitle';
-    const SETTINGS_NS = 'llm-pi-ai';
+    /** 插件自有设置节（0.1.7+ entry-config 模型，由宿主 Config schema 派生）。 */
+    const OWN_SETTINGS_NS = NS;
+    /** ≤0.1.6 namespace 模型宿主的旧存储位置。 */
+    const LEGACY_SETTINGS_NS = 'llm-pi-ai';
     const LOCALE_DATA = {
       zh: {
         'autotitle.label': '自动重命名',
@@ -46,7 +51,7 @@ window.__ModuleLoader__.load({
         'settings.saved': '已保存',
         'settings.writeError': '写入失败：{message}',
         'settings.writeFailed': '写入失败，请重试',
-        'settings.noNamespace': '未找到 llm-pi-ai 设置命名空间',
+        'settings.noNamespace': '未找到设置命名空间（session-autotitle / llm-pi-ai）',
         'settings.readFailed': '读取设置失败：{message}'
       },
       en: {
@@ -70,7 +75,7 @@ window.__ModuleLoader__.load({
         'settings.saved': 'Saved',
         'settings.writeError': 'Write failed: {message}',
         'settings.writeFailed': 'Write failed, please retry',
-        'settings.noNamespace': 'llm-pi-ai settings namespace not found',
+        'settings.noNamespace': 'settings namespace not found (session-autotitle / llm-pi-ai)',
         'settings.readFailed': 'Failed to read settings: {message}'
       },
       ja: {
@@ -94,7 +99,7 @@ window.__ModuleLoader__.load({
         'settings.saved': '保存しました',
         'settings.writeError': '書き込み失敗：{message}',
         'settings.writeFailed': '書き込み失敗、再試行してください',
-        'settings.noNamespace': 'llm-pi-ai 設定名前空間が見つかりません',
+        'settings.noNamespace': '設定名前空間が見つかりません（session-autotitle / llm-pi-ai）',
         'settings.readFailed': '設定の読み取り失敗：{message}'
       },
       ko: {
@@ -118,7 +123,7 @@ window.__ModuleLoader__.load({
         'settings.saved': '저장됨',
         'settings.writeError': '쓰기 실패: {message}',
         'settings.writeFailed': '쓰기 실패, 다시 시도하세요',
-        'settings.noNamespace': 'llm-pi-ai 설정 네임스페이스를 찾을 수 없습니다',
+        'settings.noNamespace': '설정 네임스페이스를 찾을 수 없습니다 (session-autotitle / llm-pi-ai)',
         'settings.readFailed': '설정 읽기 실패: {message}'
       }
     };
@@ -249,7 +254,7 @@ window.__ModuleLoader__.load({
         : (key, params) => String(zh[key] || key).replace(/\{(\w+)\}/g, (match, name) => params && name in params ? String(params[name]) : match);
       const theme = settingsPalette();
       const [state, setState] = React.useState({
-        loading: true, nsFound: true, draft: 'auto', custom: '', maxBytes: String(BYTES_MAX),
+        loading: true, nsFound: true, nsId: null, draft: 'auto', custom: '', maxBytes: String(BYTES_MAX),
         revision: 0, busy: false, error: null, notice: null
       });
 
@@ -270,7 +275,10 @@ window.__ModuleLoader__.load({
               return;
             }
             const namespaces = (response.value && response.value.namespaces) || [];
-            const ns = namespaces.find((n) => n.ns === SETTINGS_NS);
+            // 0.1.7+ 宿主有插件自有节（session-autotitle）→ 用它；
+            // ≤0.1.6 namespace 模型无该节 → 回退旧 llm-pi-ai 节。
+            const ns = namespaces.find((n) => n.ns === OWN_SETTINGS_NS)
+              || namespaces.find((n) => n.ns === LEGACY_SETTINGS_NS);
             if (!ns) {
               setState((s) => ({ ...s, loading: false, nsFound: false }));
               return;
@@ -278,7 +286,7 @@ window.__ModuleLoader__.load({
             const rawUser = ns.user && typeof ns.user === 'object' ? ns.user : {};
             const d = draftFromValue(rawUser.titleLanguage);
             setState((s) => ({
-              ...s, loading: false, nsFound: true, draft: d.draft, custom: d.custom,
+              ...s, loading: false, nsFound: true, nsId: ns.ns, draft: d.draft, custom: d.custom,
               maxBytes: bytesFromValue(rawUser.titleMaxBytes),
               revision: typeof ns.revision === 'number' ? ns.revision : 0
             }));
@@ -319,9 +327,14 @@ window.__ModuleLoader__.load({
           ? { op: 'unset', path: ['titleMaxBytes'] }
           : { op: 'set', path: ['titleMaxBytes'], value: bytes });
         setState((s) => ({ ...s, busy: true, error: null, notice: null }));
-        // ctx.remote.settings：mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应
+        // ctx.remote.settings：mutate(ns, ops, expectedRevision) 位置参数 + 扁平响应。
+        // 目标节由 load() 解析（自有节优先，回退旧节）并固化在 state.nsId。
+        if (!state.nsId) {
+          setState((s) => ({ ...s, busy: false, error: t('settings.noNamespace') }));
+          return;
+        }
         const expectedRevision = state.revision > 0 ? state.revision : undefined;
-        Promise.resolve(settings.mutate(SETTINGS_NS, ops, expectedRevision))
+        Promise.resolve(settings.mutate(state.nsId, ops, expectedRevision))
           .then((response) => {
             if (!response || !response.ok) {
               const message = response && response.error && response.error.message
