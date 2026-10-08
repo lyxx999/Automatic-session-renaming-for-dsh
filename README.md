@@ -4,7 +4,15 @@ DSH 会话自动命名（profile 本地 bundle，更新免疫）。
 
 ## 适配版本（DSH 兼容性）
 
-- **最低版本：DSH ≥ 0.1.2-rc.1**（宿主半区依赖 `@deepseek-ai/dsh-llm` 的
+- **当前版本适配：DSH ≥ 0.2.0-rc.2（会话格式 v4）**。0.2.4 起标题请求
+  消息的 source 写为 v4 producer-owned kind `plugin:dsh-session-autotitle`
+  （未知第三方插件的 v4 规范写法，与 v3→v4 迁移对插件源的产出一致）。
+  **原因**：v4 的写入路径（`dsh-session-format-v3-to-v4` 的
+  `assertV4SourceRowAdmission`）拒收 0.2.3 沿用的退役 v3 裸包装
+  `{ kind: 'plugin', plugin: … }`——0.2.3 因此在 v4 宿主上导致新会话
+  首条提示词的整批落盘失败（agent turn failed、回退标题、projection
+  cache 持续告警）。DSH < 0.2.0（v3 时代）请用 0.2.3。
+- **最低 API 版本：DSH ≥ 0.1.2-rc.1**（宿主半区依赖 `@deepseek-ai/dsh-llm` 的
   `BlockAssembler` / `createUserMessage`、`@deepseek-ai/dsh-timeout` 的
   `deadline`、`@deepseek-ai/dsh-session-title` 的
   `SessionTitleProviderId` / `normalizeSessionTitle`，以及
@@ -68,7 +76,7 @@ src/client.js         浏览器：会话头"自动重命名"按钮
                       设置分区"会话自动命名"（settings.section 插槽，
                       标题语言：跟随/中文/English/自定义；
                        标题最大字节数：1–80 整数，默认 80；zh/en/ja/ko）
-test/                 单元测试（node --test，39 例：title 17 / host 11 / client 11）
+test/                 单元测试（node --test，41 例：title 18 / host 11 / client 12）
 ```
 
 ## 思考关线的接线原理（本地 qwen 路由）

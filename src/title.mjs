@@ -224,7 +224,7 @@ async function generate(config, ctx, request, providerId) {
   const messages = [
     createUserMessage({
       content: [{ type: 'text', text: framedInput }],
-      source: { kind: 'plugin', plugin: 'dsh-session-autotitle' },
+      source: { kind: 'plugin:dsh-session-autotitle' },
     }),
   ]
   const language = readTitleLanguage(ctx)
