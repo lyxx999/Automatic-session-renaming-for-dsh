@@ -226,7 +226,12 @@ async function generate(config, ctx, request, providerId) {
   const messages = [
     createUserMessage({
       content: [{ type: 'text', text: framedInput }],
-      source: { kind: 'plugin:dsh-session-autotitle' },
+      // v4 的 titleSources 校验（dsh-session-format-v3-to-v4）要求
+      // session/title-llm-request 的标题消息 source.kind 必须是规范的
+      // 'dsh-session-title-llm'（与 dsh-session-title-llm 基线一致）；
+      // 使用 'plugin:<name>' 会让该行在严格解码/重编码时被丢弃，
+      // 进而使后续事件的 messageSeqs 引用悬空，最终触发日志损坏。
+      source: { kind: 'dsh-session-title-llm' },
     }),
   ]
   const language = readTitleLanguage(ctx)

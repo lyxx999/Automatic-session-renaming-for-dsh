@@ -137,7 +137,7 @@ test('generate：路由支持 off → 请求 reasoningEffort off，返回归一�
   assert.equal(opts.maxTokens, 256)
   assert.equal(opts.sessionId, 'session-1')
   assert.equal(opts.messages.length, 1)
-  assert.equal(opts.messages[0].source.kind, 'plugin:dsh-session-autotitle')
+  assert.equal(opts.messages[0].source.kind, 'dsh-session-title-llm')
   const framed = opts.messages[0].content[0].text
   assert.ok(framed.includes('"seq":1') && framed.includes('"seq":3'), '两条消息都被框定')
   assert.equal(request.session.appends.length, 1)
@@ -145,13 +145,14 @@ test('generate：路由支持 off → 请求 reasoningEffort off，返回归一�
   assert.deepEqual(request.session.appends[0].data.messageSeqs, [1, 3])
 })
 
-test('generate：标题消息 source 是 v4 producer-owned kind（不用退役的 plugin 包装）', async () => {
-  // 回归：DSH 0.2.0-rc.2+（会话格式 v4）的写入路径
-  // （dsh-session-format-v3-to-v4 的 assertV4SourceRowAdmission）拒绝
-  // 退役的裸 { kind: 'plugin', plugin: … } 包装——当时 0.2.3 因此导致
-  // 新会话首条提示词整批落盘失败（agent turn failed + 回退标题 +
-  // projection cache 持续告警）。未知第三方插件的 v4 规范写法是
-  // 'plugin:<插件名>'（与 v3→v4 迁移的产出一致）。
+test('generate：标题消息 source.kind 是 v4 规范的 dsh-session-title-llm', async () => {
+  // 回归：DSH 0.2.0-rc.2+（会话格式 v4）的 titleSources 校验
+  // （dsh-session-format-v3-to-v4）要求 session/title-llm-request 的
+  // 标题消息 source.kind 必须为 'dsh-session-title-llm'（与
+  // dsh-session-title-llm 基线一致）。此前 0.2.3 用退役的裸 plugin 包装
+  // 导致整批落盘失败；0.2.4 起误用 'plugin:<name>'，虽能通过写入路径，
+  // 却会在严格解码/重编码时使该行被丢弃、messageSeqs 悬空，最终触发
+  // 日志损坏（历史加载失败）。现固定为规范 kind。
   const { ctx, calls } = makeCtx()
   mod.apply(ctx, { ...CONFIG })
   const request = makeRequest({ messages: [{ seq: 1, text: 'hi' }] })
@@ -161,7 +162,7 @@ test('generate：标题消息 source 是 v4 producer-owned kind（不用退役�
   assert.equal(typeof source.kind, 'string')
   assert.ok(source.kind.length > 0, 'kind 必须非空')
   assert.notEqual(source.kind, 'plugin', '裸 plugin 包装已被 v4 写入路径拒收')
-  assert.equal(source.kind, 'plugin:dsh-session-autotitle')
+  assert.equal(source.kind, 'dsh-session-title-llm', '必须使用 v4 规范 kind')
 })
 
 test('generate：路由不支持 off → 不带档位（其余适配器安全）', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@lyxx/dsh-session-autotitle",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "DSH 会话自动命名：全消息 LLM 总结标题（首条提示词/handoff 自动 + 会话头按钮/命令手动），标题调用强制关思考（0.2.0 设置模型下思考接线自补齐），标题语言与最大字节数可设置。适配 DSH ≥ 0.2.0-rc.2（会话格式 v4；更早版本请用 0.2.3）。",
   "scripts": {
     "test": "node --test test/"
